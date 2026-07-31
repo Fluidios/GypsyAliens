@@ -1,5 +1,6 @@
 using Fusion;
 using GypsyAliens.Core;
+using GypsyAliens.Network;
 using UnityEngine;
 
 namespace GypsyAliens.Npc
@@ -198,8 +199,9 @@ namespace GypsyAliens.Npc
         bool TryHitNpc(Vector3 rockPosition, out Vector3 impactPoint)
         {
             impactPoint = rockPosition;
+            var thrower = Object != null ? Object.InputAuthority : PlayerRef.None;
 
-            // Physics query (hit capsule on NPCs).
+            // Physics query (hit capsule on NPCs / players).
             var hits = Physics.OverlapSphere(rockPosition, _hitRadius, _npcHitMask, QueryTriggerInteraction.Collide);
             for (var i = 0; i < hits.Length; i++)
             {
@@ -222,6 +224,18 @@ namespace GypsyAliens.Npc
                 {
                     hostile.ApplyStun(_start);
                     impactPoint = hostile.transform.position;
+                    return true;
+                }
+
+                var player = hits[i].GetComponentInParent<NetworkPlayerController>();
+                if (player != null
+                    && player.Object != null
+                    && player.Object.IsValid
+                    && !player.IsStunned
+                    && player.Object.InputAuthority != thrower)
+                {
+                    player.ApplyStun();
+                    impactPoint = player.transform.position + Vector3.up * 0.9f;
                     return true;
                 }
             }
@@ -268,6 +282,32 @@ namespace GypsyAliens.Npc
                 }
 
                 npc.ApplyStun(_start);
+                impactPoint = body;
+                return true;
+            }
+
+            var players = FindObjectsByType<NetworkPlayerController>(FindObjectsSortMode.None);
+            var playerRange = _hitRadius + 0.5f;
+            var playerRangeSq = playerRange * playerRange;
+            for (var i = 0; i < players.Length; i++)
+            {
+                var player = players[i];
+                if (player == null
+                    || player.Object == null
+                    || !player.Object.IsValid
+                    || player.IsStunned
+                    || player.Object.InputAuthority == thrower)
+                {
+                    continue;
+                }
+
+                var body = player.transform.position + Vector3.up * 0.9f;
+                if ((body - rockPosition).sqrMagnitude > playerRangeSq)
+                {
+                    continue;
+                }
+
+                player.ApplyStun();
                 impactPoint = body;
                 return true;
             }

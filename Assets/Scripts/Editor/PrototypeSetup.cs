@@ -678,6 +678,35 @@ namespace GypsyAliens.EditorTools
             {
                 input.text = defaultValue;
                 input.contentType = InputField.ContentType.Alphanumeric;
+
+                // Clean Settings UI ships with an empty Pressed trigger → Animator spam.
+                var triggers = input.animationTriggers;
+                if (string.IsNullOrEmpty(triggers.pressedTrigger))
+                {
+                    triggers.pressedTrigger = "Pressed";
+                }
+
+                if (string.IsNullOrEmpty(triggers.normalTrigger))
+                {
+                    triggers.normalTrigger = "Normal";
+                }
+
+                if (string.IsNullOrEmpty(triggers.highlightedTrigger))
+                {
+                    triggers.highlightedTrigger = "Highlighted";
+                }
+
+                if (string.IsNullOrEmpty(triggers.selectedTrigger))
+                {
+                    triggers.selectedTrigger = "Highlighted";
+                }
+
+                if (string.IsNullOrEmpty(triggers.disabledTrigger))
+                {
+                    triggers.disabledTrigger = "Disabled";
+                }
+
+                input.animationTriggers = triggers;
             }
         }
 

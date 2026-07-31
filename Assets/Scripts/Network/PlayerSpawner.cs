@@ -127,7 +127,9 @@ namespace GypsyAliens.Network
             TryGetLocalPlayer(out var localPlayer);
             TryGetAimPoint(out _aimPoint);
 
-            var nearNpc = localPlayer != null && TryFindDragTarget(localPlayer.transform.position, out _);
+            var nearNpc = localPlayer != null
+                && !localPlayer.IsStunned
+                && TryFindDragTarget(localPlayer.transform.position, out _);
             _tutorial?.NotifyNearAnimal(nearNpc);
 
             if (keyboard.spaceKey.wasPressedThisFrame)
@@ -138,7 +140,7 @@ namespace GypsyAliens.Network
                     _throwAiming = false;
                     _tutorial?.NotifyDragStarted();
                 }
-                else
+                else if (localPlayer == null || !localPlayer.IsStunned)
                 {
                     _throwAiming = true;
                     _dragHolding = false;
@@ -149,7 +151,7 @@ namespace GypsyAliens.Network
             _throwPathClear = false;
             if (localPlayer != null && localPlayer.TryGetComponent<PlayerThrowAimView>(out var aimView))
             {
-                if (_throwAiming)
+                if (_throwAiming && !localPlayer.IsStunned)
                 {
                     _throwPathClear = aimView.UpdateAim(localPlayer.transform.position, _aimPoint);
                 }
@@ -166,7 +168,7 @@ namespace GypsyAliens.Network
 
             if (keyboard.spaceKey.wasReleasedThisFrame)
             {
-                if (_throwAiming && _throwPathClear)
+                if (_throwAiming && _throwPathClear && (localPlayer == null || !localPlayer.IsStunned))
                 {
                     // Sticky until OnInput consumes it (Fusion may poll OnInput before Update).
                     _throwReleasedThisFrame = true;

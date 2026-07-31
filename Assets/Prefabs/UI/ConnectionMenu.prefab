@@ -740,6 +740,10 @@ PrefabInstance:
       propertyPath: m_CharacterValidation
       value: 3
       objectReference: {fileID: 0}
+    - target: {fileID: 11468188, guid: 4c5368a58301e4892a15a0228d4fb291, type: 3}
+      propertyPath: m_AnimationTriggers.m_PressedTrigger
+      value: Pressed
+      objectReference: {fileID: 0}
     - target: {fileID: 11492918, guid: 4c5368a58301e4892a15a0228d4fb291, type: 3}
       propertyPath: m_Text
       value: Room Name

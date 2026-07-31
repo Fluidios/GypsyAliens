@@ -62,6 +62,7 @@ namespace GypsyAliens.Npc
         Vector3 _extractStart;
         float _extractTargetY;
         bool _extractFinished;
+        bool _extractFxPlayed;
         GypsyAliens.Gameplay.EvacuationZone _extractZone;
         CapsuleCollider _hitCollider;
 
@@ -198,6 +199,34 @@ namespace GypsyAliens.Npc
                 _dragNoise.SetRadius(_dragNoiseRadius, _dragNoiseLoudness);
                 _dragNoise.SetEmitting(IsMakingDragNoise && IsDragged && !IsExtracting);
             }
+
+            // Saucer / beam are local visuals — play on every peer when extraction starts.
+            if (IsExtracting)
+            {
+                if (!_extractFxPlayed)
+                {
+                    _extractFxPlayed = true;
+                    PlayLocalExtractionFx(transform.position);
+                }
+            }
+            else
+            {
+                _extractFxPlayed = false;
+            }
+        }
+
+        static void PlayLocalExtractionFx(Vector3 from)
+        {
+            if (SystemLocator.Instance != null
+                && SystemLocator.Instance.TryGet<GypsyAliens.Gameplay.EvacuationZoneSystem>(out var evac)
+                && evac.Zone != null)
+            {
+                evac.Zone.PlayExtractionEffect(from);
+                return;
+            }
+
+            var zone = FindFirstObjectByType<GypsyAliens.Gameplay.EvacuationZone>();
+            zone?.PlayExtractionEffect(from);
         }
 
         public override void FixedUpdateNetwork()
@@ -450,7 +479,7 @@ namespace GypsyAliens.Npc
             _extractTargetY = zone != null
                 ? zone.SaucerIntakeHeight
                 : _extractStart.y + Mathf.Max(2f, _extractLiftHeight * 0.5f);
-            _extractZone?.PlayExtractionEffect(_extractStart);
+            // Visual saucer move is handled in Render on all peers via IsExtracting.
         }
 
         void TickExtracting()

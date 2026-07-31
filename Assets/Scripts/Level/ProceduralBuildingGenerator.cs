@@ -488,28 +488,35 @@ namespace GypsyAliens.Level
                 return;
             }
 
-            if (prop.GetComponentInChildren<Collider>() != null)
+            // Replace MeshColliders with a single box — MeshCollider depenetration
+            // against CharacterController can launch players into the air.
+            var existing = prop.GetComponentsInChildren<Collider>(true);
+            for (var i = 0; i < existing.Length; i++)
             {
-                return;
+                if (existing[i] == null)
+                {
+                    continue;
+                }
+
+                if (Application.isPlaying)
+                {
+                    Destroy(existing[i]);
+                }
+                else
+                {
+                    DestroyImmediate(existing[i]);
+                }
             }
 
-            var renderer = prop.GetComponentInChildren<Renderer>();
+            var bounds = GetWorldBounds(prop);
             var box = prop.AddComponent<BoxCollider>();
-            if (renderer != null)
-            {
-                var b = renderer.bounds;
-                box.center = prop.transform.InverseTransformPoint(b.center);
-                var lossy = prop.transform.lossyScale;
-                box.size = new Vector3(
-                    SafeDiv(b.size.x, lossy.x),
-                    SafeDiv(b.size.y, lossy.y),
-                    SafeDiv(b.size.z, lossy.z));
-            }
-            else
-            {
-                box.size = new Vector3(0.6f, 0.8f, 0.6f);
-                box.center = new Vector3(0f, 0.4f, 0f);
-            }
+            var t = prop.transform;
+            box.center = t.InverseTransformPoint(bounds.center);
+            var lossy = t.lossyScale;
+            box.size = new Vector3(
+                SafeDiv(bounds.size.x, lossy.x),
+                SafeDiv(bounds.size.y, lossy.y),
+                SafeDiv(bounds.size.z, lossy.z));
         }
 
         static float SafeDiv(float a, float b) => Mathf.Abs(b) < 0.0001f ? a : a / b;

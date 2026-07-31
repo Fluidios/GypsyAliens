@@ -45,11 +45,23 @@ namespace GypsyAliens.Network
                 _wallMask = GameLayers.WallMask;
             }
 
-            if (_line == null)
+            // Keep aim visuals on a world root so player teleport / launch / disable
+            // never hides or warps the preview with the character transform.
+            var rootGo = new GameObject("PlayerThrowAimWorld");
+            var worldRoot = rootGo.transform;
+
+            // Never reparent the player (prefab may already have a LineRenderer on this GO).
+            var existingOnPlayer = GetComponent<LineRenderer>();
+            if (existingOnPlayer != null)
             {
-                _line = gameObject.AddComponent<LineRenderer>();
+                existingOnPlayer.enabled = false;
+                if (_line == existingOnPlayer)
+                {
+                    _line = null;
+                }
             }
 
+            _line = rootGo.AddComponent<LineRenderer>();
             _line.positionCount = _segments;
             _line.startWidth = _width;
             _line.endWidth = _width * 0.45f;
@@ -62,16 +74,24 @@ namespace GypsyAliens.Network
             _line.sharedMaterial = _lineMaterial;
             _line.enabled = false;
 
-            BuildReticle();
+            BuildReticle(worldRoot);
             _currentColor = _clearColor;
             ApplyColors(_clearColor);
             SetVisible(false);
         }
 
-        void BuildReticle()
+        void OnDestroy()
+        {
+            if (_line != null && _line.gameObject != null && _line.gameObject != gameObject)
+            {
+                Destroy(_line.gameObject);
+            }
+        }
+
+        void BuildReticle(Transform parent)
         {
             var rootGo = new GameObject("ThrowFloorReticle");
-            rootGo.transform.SetParent(transform, false);
+            rootGo.transform.SetParent(parent, false);
             _reticleRoot = rootGo.transform;
 
             _reticleMaterial = CreateTransparentMaterial(_clearColor);

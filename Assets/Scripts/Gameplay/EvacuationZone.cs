@@ -193,6 +193,7 @@ namespace GypsyAliens.Gameplay
 
             if (_saucer != null)
             {
+                // Keep XZ from PlayExtractionEffect; only bob altitude from home height.
                 _saucer.Rotate(0f, 35f * Time.deltaTime, 0f, Space.World);
                 var bob = _saucerHome.y + Mathf.Sin(_pulse * 1.6f) * 0.2f;
                 var p = _saucer.position;

@@ -16,12 +16,15 @@ namespace GypsyAliens.Network
         [SerializeField] float _dragRange = 2.2f;
         [SerializeField] NetworkObject _rockPrefab;
         [SerializeField] float _rockSpawnHeight = 0.6f;
+        [SerializeField] float _rockStunDuration = 3.5f;
+        [SerializeField] StunStarsEffect _stunStars;
 
         NetworkCharacterController _ncc;
         CharacterController _characterController;
         bool _cameraBound;
         bool _released;
         Vector3 _holdPosition;
+        float _stunLeft;
 
         readonly List<Vector3> _waypoints = new List<Vector3>(8);
         int _waypointIndex;
@@ -30,6 +33,8 @@ namespace GypsyAliens.Network
         NetworkFearfulNpc _draggedNpc;
         float _baseMaxSpeed = 2f;
         float _respawnInvulnLeft;
+
+        [Networked] public NetworkBool IsStunned { get; set; }
 
         /// <summary>True while this player is pathfinding / walking this tick.</summary>
         public bool IsActivelyMoving => _hasPath && _waypointIndex < _waypoints.Count;
@@ -43,10 +48,24 @@ namespace GypsyAliens.Network
                 _baseMaxSpeed = _ncc.maxSpeed;
             }
 
+            if (_stunStars == null)
+            {
+                _stunStars = GetComponentInChildren<StunStarsEffect>(true);
+                if (_stunStars == null)
+                {
+                    var starsGo = new GameObject("StunStars");
+                    starsGo.transform.SetParent(transform, false);
+                    _stunStars = starsGo.AddComponent<StunStarsEffect>();
+                }
+            }
+
             _holdPosition = transform.position + Vector3.up * _holdHeight;
             _released = false;
             _respawnInvulnLeft = 0f;
+            _stunLeft = 0f;
+            IsStunned = false;
             ClearPath();
+            RefreshStunVisual(false);
 
             if (GetComponent<PlayerThrowAimView>() == null && HasInputAuthority)
             {
@@ -79,6 +98,7 @@ namespace GypsyAliens.Network
                 transform.position = _holdPosition;
             }
 
+            RefreshStunVisual(IsStunned);
             TryBindCamera();
         }
 
@@ -146,6 +166,17 @@ namespace GypsyAliens.Network
                 return;
             }
 
+            if (_respawnInvulnLeft > 0f)
+            {
+                _respawnInvulnLeft -= Runner.DeltaTime;
+            }
+
+            if (IsStunned || _stunLeft > 0f)
+            {
+                TickStunned();
+                return;
+            }
+
             if (!GetInput(out NetworkPlayerInput input))
             {
                 return;
@@ -158,11 +189,6 @@ namespace GypsyAliens.Network
                 _ncc.Velocity = Vector3.zero;
                 _ncc.Move(Vector3.zero);
                 return;
-            }
-
-            if (_respawnInvulnLeft > 0f)
-            {
-                _respawnInvulnLeft -= Runner.DeltaTime;
             }
 
             if (input.ThrowReleased && Runner.IsServer)
@@ -191,6 +217,7 @@ namespace GypsyAliens.Network
                 ApplyDragMoveSpeed();
                 _ncc.Velocity = Vector3.zero;
                 _ncc.Move(Vector3.zero);
+                ClampUnexpectedLaunch();
                 return;
             }
 
@@ -211,11 +238,62 @@ namespace GypsyAliens.Network
                     _ncc.Move(Vector3.zero);
                 }
 
+                ClampUnexpectedLaunch();
                 return;
             }
 
             ApplyDragMoveSpeed();
             _ncc.Move(toTarget / distance);
+            ClampUnexpectedLaunch();
+        }
+
+        void TickStunned()
+        {
+            ReleaseDrag();
+            ClearPath();
+            if (_ncc != null)
+            {
+                _ncc.Velocity = Vector3.zero;
+                _ncc.Move(Vector3.zero);
+            }
+
+            if (!HasStateAuthority)
+            {
+                return;
+            }
+
+            _stunLeft -= Runner.DeltaTime;
+            if (_stunLeft > 0f)
+            {
+                IsStunned = true;
+                return;
+            }
+
+            _stunLeft = 0f;
+            IsStunned = false;
+            RefreshStunVisual(false);
+        }
+
+        /// <summary>
+        /// Rock hit stun — host-authoritative. Blocks move / throw / drag while active.
+        /// </summary>
+        public void ApplyStun(float duration = -1f)
+        {
+            if (!HasStateAuthority || !_released)
+            {
+                return;
+            }
+
+            if (_respawnInvulnLeft > 0f)
+            {
+                return;
+            }
+
+            _stunLeft = duration > 0f ? duration : _rockStunDuration;
+            IsStunned = true;
+            ReleaseDrag();
+            ClearPath();
+            RefreshStunVisual(true);
         }
 
         void ApplyDragMoveSpeed()
@@ -237,6 +315,11 @@ namespace GypsyAliens.Network
 
         void TryThrowRock(NetworkPlayerInput input)
         {
+            if (IsStunned)
+            {
+                return;
+            }
+
             if (_rockPrefab == null)
             {
                 if (SystemLocator.Instance != null
@@ -278,7 +361,7 @@ namespace GypsyAliens.Network
 
         void TickDrag(bool holding)
         {
-            if (!HasStateAuthority)
+            if (!HasStateAuthority || IsStunned)
             {
                 return;
             }
@@ -349,6 +432,9 @@ namespace GypsyAliens.Network
         {
             ReleaseDrag();
             ClearPath();
+            _stunLeft = 0f;
+            IsStunned = false;
+            RefreshStunVisual(false);
             _respawnInvulnLeft = 1.25f;
 
             var spawn = transform.position;
@@ -368,6 +454,43 @@ namespace GypsyAliens.Network
             {
                 transform.position = spawn;
             }
+        }
+
+        /// <summary>
+        /// CharacterController depenetration against prop MeshColliders can yeet the player upward.
+        /// Undo extreme vertical spikes (there is no jump in this prototype).
+        /// </summary>
+        void ClampUnexpectedLaunch()
+        {
+            if (_ncc == null)
+            {
+                return;
+            }
+
+            var v = _ncc.Velocity;
+            if (v.y > 0.05f)
+            {
+                v.y = 0f;
+                _ncc.Velocity = v;
+            }
+
+            var pos = transform.position;
+            if (pos.y <= 2.5f)
+            {
+                return;
+            }
+
+            var groundedY = 0.15f;
+            if (SystemLocator.Instance != null
+                && SystemLocator.Instance.TryGet<LevelGenerationSystem>(out var level)
+                && level.HasSpawnPoint)
+            {
+                groundedY = level.SpawnPosition.y;
+            }
+
+            pos.y = groundedY;
+            _ncc.Teleport(pos);
+            _ncc.Velocity = Vector3.zero;
         }
 
         bool TryFindNearestDraggable(out NetworkFearfulNpc npc)
@@ -448,6 +571,14 @@ namespace GypsyAliens.Network
             if (_ncc != null)
             {
                 _ncc.Velocity = Vector3.zero;
+            }
+        }
+
+        void RefreshStunVisual(bool stunned)
+        {
+            if (_stunStars != null)
+            {
+                _stunStars.SetActive(stunned);
             }
         }
 
