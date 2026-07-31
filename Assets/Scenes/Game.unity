@@ -865,6 +865,9 @@ MonoBehaviour:
   _roomSize: 10
   _spawnHeight: 0.15
   _yieldEveryRooms: 1
+  _propChancePerSlot: 0.63
+  _propInsetCells: 0.85
+  _propWallClearance: 0.12
 --- !u!114 &970582253
 MonoBehaviour:
   m_ObjectHideFlags: 0

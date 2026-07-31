@@ -1,0 +1,18 @@
+{
+    "name": "CC.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:0b4605f34c4e56d4e825b8c66e08c61c"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
