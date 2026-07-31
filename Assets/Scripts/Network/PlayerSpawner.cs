@@ -395,9 +395,28 @@ namespace GypsyAliens.Network
         }
 
         public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
-        public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
+
+        public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
+        {
+            if (SystemLocator.Instance != null
+                && SystemLocator.Instance.TryGet<NetworkService>(out var network))
+            {
+                network.NotifyRunnerStopped(runner, shutdownReason.ToString());
+            }
+        }
+
         public void OnConnectedToServer(NetworkRunner runner) { }
-        public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
+
+        public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
+        {
+            // Host quit / connection dropped — return this client to the hub menu.
+            if (SystemLocator.Instance != null
+                && SystemLocator.Instance.TryGet<NetworkService>(out var network))
+            {
+                network.NotifyDisconnectedFromServer(runner, reason.ToString());
+            }
+        }
+
         public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
         public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
         public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }

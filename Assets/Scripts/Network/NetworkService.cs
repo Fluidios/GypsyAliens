@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Fusion;
 using GypsyAliens.Core;
+using GypsyAliens.UI;
 using UnityEngine;
 
 namespace GypsyAliens.Network
@@ -20,6 +21,8 @@ namespace GypsyAliens.Network
         [SerializeField] NetworkObject _rockPrefab;
 
         NetworkRunner _runner;
+        bool _ownedShutdown;
+        bool _returningToMenu;
 
         public NetworkRunner Runner => _runner;
         public bool IsRunning => _runner != null && _runner.IsRunning;
@@ -50,6 +53,7 @@ namespace GypsyAliens.Network
                 return;
             }
 
+            _returningToMenu = false;
             _runner = Instantiate(_runnerPrefab);
             _runner.name = "NetworkRunner";
             DontDestroyOnLoad(_runner.gameObject);
@@ -90,20 +94,123 @@ namespace GypsyAliens.Network
                 Destroy(_runner.gameObject);
                 _runner = null;
             }
+
+            ReturnToConnectionMenu();
         }
 
         public async Task ShutdownAsync()
         {
             if (_runner == null)
             {
+                ReturnToConnectionMenu();
                 return;
             }
 
-            await _runner.Shutdown();
-            if (_runner != null)
+            _ownedShutdown = true;
+            var runner = _runner;
+            try
             {
-                Destroy(_runner.gameObject);
+                await runner.Shutdown();
+            }
+            finally
+            {
+                _ownedShutdown = false;
+                if (_runner == runner)
+                {
+                    _runner = null;
+                }
+
+                if (runner != null)
+                {
+                    Destroy(runner.gameObject);
+                }
+            }
+
+            ReturnToConnectionMenu();
+        }
+
+        /// <summary>
+        /// Called from Fusion callbacks when the runner stops (host left, kick, quit, etc.).
+        /// </summary>
+        public void NotifyRunnerStopped(NetworkRunner runner, string reason = null)
+        {
+            if (runner != null && _runner != null && runner != _runner)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(reason))
+            {
+                Debug.Log($"NetworkService: session ended ({reason}).");
+            }
+
+            if (_runner == runner)
+            {
                 _runner = null;
+            }
+
+            // Owned ShutdownAsync destroys the runner after await — skip destroy here.
+            if (!_ownedShutdown && runner != null)
+            {
+                Destroy(runner.gameObject);
+            }
+
+            ReturnToConnectionMenu();
+        }
+
+        /// <summary>
+        /// Client lost the host / server — force local runner teardown if it is still marked running.
+        /// </summary>
+        public void NotifyDisconnectedFromServer(NetworkRunner runner, string reason = null)
+        {
+            if (runner != null && runner.IsRunning)
+            {
+                // Triggers OnShutdown → NotifyRunnerStopped.
+                runner.Shutdown();
+                return;
+            }
+
+            NotifyRunnerStopped(runner, reason ?? "DisconnectedFromServer");
+        }
+
+        void ReturnToConnectionMenu()
+        {
+            if (_returningToMenu)
+            {
+                return;
+            }
+
+            _returningToMenu = true;
+            try
+            {
+                if (SystemLocator.Instance == null)
+                {
+                    return;
+                }
+
+                if (SystemLocator.Instance.TryGet<PauseMenuSystem>(out var pause))
+                {
+                    pause.SetOpen(false);
+                }
+
+                if (SystemLocator.Instance.TryGet<MissionProgressUISystem>(out var mission))
+                {
+                    mission.HideAllOverlays();
+                }
+
+                if (SystemLocator.Instance.TryGet<LoadingScreenSystem>(out var loading))
+                {
+                    loading.Hide();
+                }
+
+                if (SystemLocator.Instance.TryGet<ConnectionUISystem>(out var connection))
+                {
+                    connection.SetMenuVisible(true);
+                }
+            }
+            finally
+            {
+                _returningToMenu = false;
             }
         }
     }
