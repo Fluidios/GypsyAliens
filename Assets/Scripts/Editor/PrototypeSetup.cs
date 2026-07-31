@@ -30,13 +30,14 @@ namespace GypsyAliens.EditorTools
         const string FloorPath = "Assets/Synty/PolygonPrototype/Prefabs/Buildings/Simple/SM_Buildings_Floor_1x1_01.prefab";
         const string WallPath = "Assets/Synty/PolygonPrototype/Prefabs/Buildings/Simple/SM_Buildings_Wall_1x3_01.prefab";
         const string DoorWallPath = "Assets/Synty/PolygonPrototype/Prefabs/Buildings/Simple/SM_Buildings_WallDoor_2x3_01.prefab";
-        const string DummyPath = "Assets/Kevin Iglesias/Human Animations/Unity Demo Scenes/Human Basic Motions/Prefabs/Human_BasicMotionsDummy_M.prefab";
+        const string DummyPath = "Assets/Alien/Mr Grey.fbx";
         const string IdleClipPath = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Idles/HumanM@Idle01.fbx";
         const string WalkClipPath = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Movement/Walk/HumanM@Walk01_Forward.fbx";
 
         const string CatVisualPath = "Assets/PolyOne/Cartoon Dog, Cat/Prefab/SM_CartoonAnimal_Cat.prefab";
         const string DogVisualPath = "Assets/PolyOne/Cartoon Dog, Cat/Prefab/SM_CartoonAnimal_Dog.prefab";
         const string VisionConeMatPath = "Assets/Materials/VisionCone.mat";
+        const string AlienMaterialPath = "Assets/Alien/Materials/1K_Alien_TXTR.mat";
 
         [MenuItem("GypsyAliens/Setup Prototype Scene")]
         public static void Setup()
@@ -229,6 +230,8 @@ namespace GypsyAliens.EditorTools
 
         static NetworkObject CreatePlayerPrefab(RuntimeAnimatorController animator)
         {
+            EnsureAlienUrpMaterial();
+
             const string path = PrefabNetworkFolder + "/NetworkPlayer.prefab";
             var go = new GameObject("NetworkPlayer");
             go.AddComponent<NetworkObject>();
@@ -259,11 +262,65 @@ namespace GypsyAliens.EditorTools
 
                 anim.runtimeAnimatorController = animator;
                 anim.applyRootMotion = false;
+
+                // Fit humanoid roughly to CharacterController height.
+                var renderers = visual.GetComponentsInChildren<Renderer>();
+                if (renderers.Length > 0)
+                {
+                    var bounds = renderers[0].bounds;
+                    for (var i = 1; i < renderers.Length; i++)
+                    {
+                        bounds.Encapsulate(renderers[i].bounds);
+                    }
+
+                    if (bounds.size.y > 0.01f)
+                    {
+                        var scale = 1.75f / bounds.size.y;
+                        visual.transform.localScale = Vector3.one * scale;
+                    }
+                }
             }
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(go, path);
             Object.DestroyImmediate(go);
             return prefab.GetComponent<NetworkObject>();
+        }
+
+        static void EnsureAlienUrpMaterial()
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(AlienMaterialPath);
+            if (mat == null)
+            {
+                return;
+            }
+
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null)
+            {
+                shader = Shader.Find("Universal Render Pipeline/Simple Lit");
+            }
+
+            if (shader == null || mat.shader == shader)
+            {
+                return;
+            }
+
+            var tex = mat.HasProperty("_MainTex") ? mat.GetTexture("_MainTex") : mat.mainTexture;
+            mat.shader = shader;
+            if (tex != null)
+            {
+                if (mat.HasProperty("_BaseMap"))
+                {
+                    mat.SetTexture("_BaseMap", tex);
+                }
+
+                if (mat.HasProperty("_MainTex"))
+                {
+                    mat.SetTexture("_MainTex", tex);
+                }
+            }
+
+            EditorUtility.SetDirty(mat);
         }
 
         static NetworkObject CreateAnimalNpcPrefab(string name, string visualPath)
@@ -293,6 +350,19 @@ namespace GypsyAliens.EditorTools
                 var visual = (GameObject)PrefabUtility.InstantiatePrefab(visualPrefab);
                 visual.name = "Visual";
                 visual.transform.SetParent(root.transform, false);
+                if (name.Contains("Cat"))
+                {
+                    visual.transform.localScale = Vector3.one * 0.25f;
+                    cc.height = 0.35f;
+                    cc.radius = 0.12f;
+                    cc.center = new Vector3(0f, 0.18f, 0f);
+                    cc.stepOffset = 0.05f;
+                }
+                else
+                {
+                    cc.stepOffset = 0.2f;
+                }
+
                 var anim = visual.GetComponentInChildren<Animator>();
                 if (anim != null)
                 {
@@ -435,6 +505,14 @@ namespace GypsyAliens.EditorTools
             uiGo.transform.SetParent(systems.transform);
             var ui = uiGo.AddComponent<ConnectionUISystem>();
             WireConnectionUi(ui, menuInstance);
+
+            var evacGo = new GameObject("EvacuationZoneSystem");
+            evacGo.transform.SetParent(systems.transform);
+            evacGo.AddComponent<GypsyAliens.Gameplay.EvacuationZoneSystem>();
+
+            var missionUiGo = new GameObject("MissionProgressUISystem");
+            missionUiGo.transform.SetParent(systems.transform);
+            missionUiGo.AddComponent<MissionProgressUISystem>();
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddSceneToBuildSettings(ScenePath);

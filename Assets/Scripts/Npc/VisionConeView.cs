@@ -19,6 +19,11 @@ namespace GypsyAliens.Npc
         [SerializeField] LayerMask _occlusionMask;
         [SerializeField] Material _material;
 
+        static readonly Color DefaultNear = new Color(0.25f, 0.95f, 0.35f, 0.45f);
+        static readonly Color DefaultFar = new Color(0.15f, 0.75f, 0.25f, 0.32f);
+        static readonly Color AlertNear = new Color(1f, 0.92f, 0.15f, 0.55f);
+        static readonly Color AlertFar = new Color(0.95f, 0.75f, 0.05f, 0.4f);
+
         MeshFilter _filter;
         MeshRenderer _renderer;
         Mesh _mesh;
@@ -26,17 +31,28 @@ namespace GypsyAliens.Npc
         Vector2[] _uvs;
         int[] _triangles;
         Material _runtimeMaterial;
+        float _alertFill;
 
         public float Range => _range;
         public float NearRadius => _nearRadius;
         public float AngleDegrees => _angleDegrees;
         public float OriginHeight => _originHeight;
+        public float AlertFill => _alertFill;
 
         public void Configure(float range, float nearRadius, float angleDegrees)
         {
             _range = Mathf.Max(0.5f, range);
             _nearRadius = Mathf.Clamp(nearRadius, 0.1f, _range);
             _angleDegrees = Mathf.Clamp(angleDegrees, 10f, 180f);
+            ApplyMaterialParams();
+        }
+
+        /// <summary>
+        /// 0 = normal green cone; 0–1 fills yellow outward from the owner toward the rim.
+        /// </summary>
+        public void SetAlertFill(float fill01)
+        {
+            _alertFill = Mathf.Clamp01(fill01);
             ApplyMaterialParams();
         }
 
@@ -131,6 +147,31 @@ namespace GypsyAliens.Npc
             if (_runtimeMaterial.HasProperty("_FarRadius"))
             {
                 _runtimeMaterial.SetFloat("_FarRadius", _range);
+            }
+
+            if (_runtimeMaterial.HasProperty("_AlertFill"))
+            {
+                _runtimeMaterial.SetFloat("_AlertFill", _alertFill);
+            }
+
+            if (_runtimeMaterial.HasProperty("_ColorNear"))
+            {
+                _runtimeMaterial.SetColor("_ColorNear", DefaultNear);
+            }
+
+            if (_runtimeMaterial.HasProperty("_ColorFar"))
+            {
+                _runtimeMaterial.SetColor("_ColorFar", DefaultFar);
+            }
+
+            if (_runtimeMaterial.HasProperty("_AlertColorNear"))
+            {
+                _runtimeMaterial.SetColor("_AlertColorNear", AlertNear);
+            }
+
+            if (_runtimeMaterial.HasProperty("_AlertColorFar"))
+            {
+                _runtimeMaterial.SetColor("_AlertColorFar", AlertFar);
             }
         }
 

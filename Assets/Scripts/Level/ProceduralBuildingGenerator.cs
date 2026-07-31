@@ -16,11 +16,11 @@ namespace GypsyAliens.Level
 
         [SerializeField] BuildingTileSet _tileSet;
         [SerializeField] Transform _levelRoot;
-        [SerializeField] int _gridWidth = 3;
-        [SerializeField] int _gridHeight = 3;
-        [SerializeField] int _minRooms = 5;
-        [SerializeField] int _maxRooms = 8;
-        [SerializeField] int _roomSize = 7;
+        [SerializeField] int _gridWidth = 4;
+        [SerializeField] int _gridHeight = 4;
+        [SerializeField] int _minRooms = 7;
+        [SerializeField] int _maxRooms = 10;
+        [SerializeField] int _roomSize = 10;
         [SerializeField] float _spawnHeight = 0.15f;
         [SerializeField] int _yieldEveryRooms = 1;
 

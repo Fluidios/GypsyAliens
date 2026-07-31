@@ -146,6 +146,7 @@ Transform:
   m_Children:
   - {fileID: 3341368209289294947}
   - {fileID: 8606786339920163140}
+  - {fileID: 1983935491696091418}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8572131934146436484
@@ -204,13 +205,13 @@ CharacterController:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Height: 0.6
-  m_Radius: 0.25
+  m_Height: 0.35
+  m_Radius: 0.12
   m_SlopeLimit: 45
-  m_StepOffset: 0.3
+  m_StepOffset: 0.05
   m_SkinWidth: 0.02
   m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 0.3, z: 0}
+  m_Center: {x: 0, y: 0.18, z: 0}
 --- !u!114 &8811224923812404767
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -223,7 +224,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 89ecff1875abadb47a038a5a4a845315, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _moveSpeed: 2.4
+  _walkSpeed: 0.85
+  _fleeSpeed: 2.6
   _turnSpeed: 540
   _arriveDistance: 0.35
   _visionRange: 8
@@ -231,8 +233,30 @@ MonoBehaviour:
   _visionAngle: 70
   _eyeHeight: 0.4
   _detectInterval: 0.15
+  _wanderPauseMin: 0.8
+  _wanderPauseMax: 2.4
+  _roomMargin: 0.7
+  _stunDuration: 10
+  _dragFollowDistance: 0.85
+  _dragWeight: 0.4
+  _dragNoiseRadius: 2.6
+  _dragNoiseLoudness: 0.55
+  _extractDuration: 1.8
+  _extractLiftHeight: 8
   _visionCone: {fileID: 7225729179951373605}
   _characterController: {fileID: 4182266100699932324}
+  _stunStars: {fileID: 7833226744495626706}
+  _dragOutline: {fileID: 0}
+  _dragNoise: {fileID: 0}
+  _IsStunned:
+    _value: 0
+  _IsDragged:
+    _value: 0
+  _IsExtracting:
+    _value: 0
+  _IsMakingDragNoise:
+    _value: 0
+  _DragOwnerCount: 0
 --- !u!114 &769475870289389645
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -265,6 +289,57 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _color: {r: 0.95, g: 0.2, b: 0.2, a: 0.92}
   _includeInactiveChildren: 0
+--- !u!1 &8533393253662059865
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1983935491696091418}
+  - component: {fileID: 7833226744495626706}
+  m_Layer: 0
+  m_Name: StunStars
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1983935491696091418
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8533393253662059865}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5469071286797526208}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7833226744495626706
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8533393253662059865}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9fbadc89470bd445af0663d3dde3606, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _starCount: 5
+  _radius: 0.35
+  _height: 0.85
+  _spinSpeed: 220
+  _bobSpeed: 4
+  _starScale: 0.12
+  _color: {r: 1, g: 0.92, b: 0.2, a: 1}
 --- !u!1001 &5798158507763021641
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -276,6 +351,18 @@ PrefabInstance:
     - target: {fileID: 2777180684130930147, guid: bdbf811528419b540805cf14dec86df5, type: 3}
       propertyPath: m_Name
       value: Visual
+      objectReference: {fileID: 0}
+    - target: {fileID: 9091042374412862250, guid: bdbf811528419b540805cf14dec86df5, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 9091042374412862250, guid: bdbf811528419b540805cf14dec86df5, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 9091042374412862250, guid: bdbf811528419b540805cf14dec86df5, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.25
       objectReference: {fileID: 0}
     - target: {fileID: 9091042374412862250, guid: bdbf811528419b540805cf14dec86df5, type: 3}
       propertyPath: m_LocalPosition.x

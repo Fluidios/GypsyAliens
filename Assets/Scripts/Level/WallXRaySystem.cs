@@ -213,7 +213,22 @@ namespace GypsyAliens.Level
 
         bool HasFloorBehindWall(Vector3 camPos, Collider wall, LayerMask floorMask)
         {
-            var nearPoint = wall.ClosestPoint(camPos);
+            if (wall == null)
+            {
+                return false;
+            }
+
+            Vector3 nearPoint;
+            if (SupportsClosestPoint(wall))
+            {
+                nearPoint = wall.ClosestPoint(camPos);
+            }
+            else
+            {
+                // Non-convex MeshColliders reject ClosestPoint — use bounds instead.
+                nearPoint = wall.bounds.ClosestPoint(camPos);
+            }
+
             var away = nearPoint - camPos;
             if (away.sqrMagnitude < 0.0001f)
             {
@@ -230,6 +245,16 @@ namespace GypsyAliens.Level
                 _rayLength,
                 floorMask,
                 QueryTriggerInteraction.Ignore);
+        }
+
+        static bool SupportsClosestPoint(Collider col)
+        {
+            if (col is BoxCollider || col is SphereCollider || col is CapsuleCollider)
+            {
+                return true;
+            }
+
+            return col is MeshCollider mesh && mesh.convex;
         }
 
         static bool IsShadowProxyRenderer(Renderer renderer)

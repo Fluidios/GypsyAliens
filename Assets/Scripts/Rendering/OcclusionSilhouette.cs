@@ -163,11 +163,11 @@ namespace GypsyAliens.Rendering
                 return true;
             }
 
-            // Also skip any renderer under a VisionCone root.
+            // Also skip any renderer under a VisionCone or StunStars root.
             var t = go.transform.parent;
             while (t != null)
             {
-                if (t.name == "VisionCone")
+                if (t.name == "VisionCone" || t.name == "StunStars" || t.name == "DragOutline")
                 {
                     return true;
                 }
@@ -175,12 +175,12 @@ namespace GypsyAliens.Rendering
                 t = t.parent;
             }
 
-            if (go.name == "WallXRay_ShadowProxy")
+            if (go.name == "WallXRay_ShadowProxy" || go.name == "StunStar" || go.name == "StunStars")
             {
                 return true;
             }
 
-            return renderer is ParticleSystemRenderer;
+            return renderer is ParticleSystemRenderer || renderer is LineRenderer;
         }
 
         void RestoreRenderers()

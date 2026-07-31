@@ -37,6 +37,7 @@ Transform:
   m_Children:
   - {fileID: 3832559327765891498}
   - {fileID: 753338542474732926}
+  - {fileID: 7510774045641753995}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &4118628486858294683
@@ -98,7 +99,7 @@ CharacterController:
   m_Height: 0.6
   m_Radius: 0.25
   m_SlopeLimit: 45
-  m_StepOffset: 0.3
+  m_StepOffset: 0.2
   m_SkinWidth: 0.02
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0.3, z: 0}
@@ -114,7 +115,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 89ecff1875abadb47a038a5a4a845315, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _moveSpeed: 2.4
+  _walkSpeed: 0.85
+  _fleeSpeed: 2.6
   _turnSpeed: 540
   _arriveDistance: 0.35
   _visionRange: 8
@@ -122,8 +124,30 @@ MonoBehaviour:
   _visionAngle: 70
   _eyeHeight: 0.4
   _detectInterval: 0.15
+  _wanderPauseMin: 0.8
+  _wanderPauseMax: 2.4
+  _roomMargin: 0.7
+  _stunDuration: 10
+  _dragFollowDistance: 0.85
+  _dragWeight: 1.15
+  _dragNoiseRadius: 4
+  _dragNoiseLoudness: 0.9
+  _extractDuration: 1.35
+  _extractLiftHeight: 8
   _visionCone: {fileID: 6572129034806680690}
   _characterController: {fileID: 9135297142300559495}
+  _stunStars: {fileID: 2753345899777671427}
+  _dragOutline: {fileID: 0}
+  _dragNoise: {fileID: 0}
+  _IsStunned:
+    _value: 0
+  _IsDragged:
+    _value: 0
+  _IsExtracting:
+    _value: 0
+  _IsMakingDragNoise:
+    _value: 0
+  _DragOwnerCount: 0
 --- !u!114 &7501803613108214871
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -156,6 +180,57 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _color: {r: 0.95, g: 0.2, b: 0.2, a: 0.92}
   _includeInactiveChildren: 0
+--- !u!1 &6130025873311733058
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7510774045641753995}
+  - component: {fileID: 2753345899777671427}
+  m_Layer: 0
+  m_Name: StunStars
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7510774045641753995
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6130025873311733058}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6516175552182274776}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2753345899777671427
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6130025873311733058}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9fbadc89470bd445af0663d3dde3606, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _starCount: 5
+  _radius: 0.35
+  _height: 0.85
+  _spinSpeed: 220
+  _bobSpeed: 4
+  _starScale: 0.12
+  _color: {r: 1, g: 0.92, b: 0.2, a: 1}
 --- !u!1 &8174600730054295408
 GameObject:
   m_ObjectHideFlags: 0

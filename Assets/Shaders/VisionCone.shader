@@ -4,10 +4,13 @@ Shader "GypsyAliens/VisionCone"
     {
         _ColorNear ("Near Color", Color) = (0.25, 0.95, 0.35, 0.45)
         _ColorFar ("Far Color", Color) = (0.15, 0.75, 0.25, 0.32)
+        _AlertColorNear ("Alert Near Color", Color) = (1.0, 0.92, 0.15, 0.55)
+        _AlertColorFar ("Alert Far Color", Color) = (0.95, 0.75, 0.05, 0.4)
         _NearRadius ("Near Radius", Float) = 2.5
         _FarRadius ("Far Radius", Float) = 8
         _StripeWidth ("Stripe Width", Float) = 0.35
         _StripeGap ("Stripe Gap", Float) = 0.25
+        _AlertFill ("Alert Fill", Float) = 0
     }
 
     SubShader
@@ -41,10 +44,13 @@ Shader "GypsyAliens/VisionCone"
             CBUFFER_START(UnityPerMaterial)
                 float4 _ColorNear;
                 float4 _ColorFar;
+                float4 _AlertColorNear;
+                float4 _AlertColorFar;
                 float _NearRadius;
                 float _FarRadius;
                 float _StripeWidth;
                 float _StripeGap;
+                float _AlertFill;
             CBUFFER_END
 
             struct Attributes
@@ -72,19 +78,28 @@ Shader "GypsyAliens/VisionCone"
                 float dist = input.distanceFromOrigin;
                 float nearR = max(_NearRadius, 0.01);
                 float farR = max(_FarRadius, nearR + 0.01);
+                float fill = saturate(_AlertFill);
+                float fillRadius = farR * fill;
+
+                half4 nearCol = (half4)_ColorNear;
+                half4 farCol = (half4)_ColorFar;
+                if (fill > 0.001 && dist <= fillRadius)
+                {
+                    nearCol = (half4)_AlertColorNear;
+                    farCol = (half4)_AlertColorFar;
+                }
 
                 if (dist <= nearR)
                 {
-                    return (half4)_ColorNear;
+                    return nearCol;
                 }
 
                 // Concentric stripes in the outer zone.
                 float band = dist - nearR;
                 float period = max(_StripeWidth + _StripeGap, 0.01);
                 float inStripe = step(frac(band / period) * period, _StripeWidth);
-                half4 far = (half4)_ColorFar;
-                far.a *= inStripe;
-                return far;
+                farCol.a *= inStripe;
+                return farCol;
             }
             ENDHLSL
         }

@@ -8,19 +8,20 @@ using UnityEngine;
 namespace GypsyAliens.Npc
 {
     /// <summary>
-    /// Host spawns one cat and one dog into random rooms after the level is ready,
+    /// Host spawns animals + one hostile homeowner after the level is ready,
     /// then marks <see cref="NetworkGameSession.GameplayReady"/>.
     /// </summary>
     public sealed class NpcSpawner : GameSystemBehaviour<NpcSpawner>
     {
         [SerializeField] NetworkObject _catPrefab;
         [SerializeField] NetworkObject _dogPrefab;
+        [SerializeField] NetworkObject _hostilePrefab;
         [SerializeField] float _spawnHeight = 0.05f;
 
-        readonly List<NetworkObject> _spawned = new List<NetworkObject>(2);
+        readonly List<NetworkObject> _spawned = new List<NetworkObject>(4);
         bool _spawnedForCurrentLevel;
 
-        public void Configure(NetworkObject catPrefab, NetworkObject dogPrefab)
+        public void Configure(NetworkObject catPrefab, NetworkObject dogPrefab, NetworkObject hostilePrefab = null)
         {
             if (catPrefab != null)
             {
@@ -30,6 +31,11 @@ namespace GypsyAliens.Npc
             if (dogPrefab != null)
             {
                 _dogPrefab = dogPrefab;
+            }
+
+            if (hostilePrefab != null)
+            {
+                _hostilePrefab = hostilePrefab;
             }
         }
 
@@ -46,7 +52,6 @@ namespace GypsyAliens.Npc
 
         void Update()
         {
-            // Host may become ready slightly after LevelReady (runner / session timing).
             if (!_spawnedForCurrentLevel)
             {
                 TrySpawnNpcs();
@@ -124,15 +129,16 @@ namespace GypsyAliens.Npc
             if (_catPrefab == null || _dogPrefab == null)
             {
                 Debug.LogError("NpcSpawner: cat/dog prefabs are not assigned.", this);
-                MarkReadyIfPossible();
+                FinalizeSpawn(0);
                 return;
             }
 
-            var rooms = PickSpawnRooms(nav.Map, level.SpawnPosition, 2);
+            var neededRooms = _hostilePrefab != null ? 3 : 2;
+            var rooms = PickSpawnRooms(nav.Map, level.SpawnPosition, neededRooms);
             if (rooms.Count < 2)
             {
                 Debug.LogWarning("NpcSpawner: not enough rooms to place NPCs.", this);
-                MarkReadyIfPossible();
+                FinalizeSpawn(0);
                 return;
             }
 
@@ -142,7 +148,25 @@ namespace GypsyAliens.Npc
             SpawnOne(runner, _catPrefab, rooms[0]);
             SpawnOne(runner, _dogPrefab, rooms[1]);
 
+            var animalCount = _spawned.Count;
+            if (_hostilePrefab != null)
+            {
+                var hostileRoom = rooms.Count > 2 ? rooms[2] : rooms[rooms.Count - 1];
+                SpawnOne(runner, _hostilePrefab, hostileRoom);
+            }
+
+            FinalizeSpawn(animalCount);
+        }
+
+        void FinalizeSpawn(int animalCount)
+        {
             _spawnedForCurrentLevel = true;
+            var session = NetworkGameSession.Instance;
+            if (session != null && session.HasStateAuthority)
+            {
+                session.SetAnimalsRequired(animalCount);
+            }
+
             MarkReadyIfPossible();
         }
 
@@ -211,7 +235,6 @@ namespace GypsyAliens.Npc
                 pool.AddRange(map.Rooms);
             }
 
-            // Fisher–Yates shuffle then take first N.
             for (var i = pool.Count - 1; i > 0; i--)
             {
                 var j = Random.Range(0, i + 1);

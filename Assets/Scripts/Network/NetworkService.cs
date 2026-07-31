@@ -16,6 +16,8 @@ namespace GypsyAliens.Network
         [SerializeField] NetworkObject _playerPrefab;
         [SerializeField] NetworkObject _catNpcPrefab;
         [SerializeField] NetworkObject _dogNpcPrefab;
+        [SerializeField] NetworkObject _hostileNpcPrefab;
+        [SerializeField] NetworkObject _rockPrefab;
 
         NetworkRunner _runner;
 
@@ -25,6 +27,8 @@ namespace GypsyAliens.Network
         public NetworkObject PlayerPrefab => _playerPrefab;
         public NetworkObject CatNpcPrefab => _catNpcPrefab;
         public NetworkObject DogNpcPrefab => _dogNpcPrefab;
+        public NetworkObject HostileNpcPrefab => _hostileNpcPrefab;
+        public NetworkObject RockPrefab => _rockPrefab;
 
         public Task StartHostAsync(string roomName) => StartGameAsync(GameMode.Host, roomName);
 
@@ -61,7 +65,7 @@ namespace GypsyAliens.Network
             if (SystemLocator.Instance != null
                 && SystemLocator.Instance.TryGet<GypsyAliens.Npc.NpcSpawner>(out var npcSpawner))
             {
-                npcSpawner.Configure(_catNpcPrefab, _dogNpcPrefab);
+                npcSpawner.Configure(_catNpcPrefab, _dogNpcPrefab, _hostileNpcPrefab);
             }
 
             var sceneManager = _runner.GetComponent<INetworkSceneManager>()
