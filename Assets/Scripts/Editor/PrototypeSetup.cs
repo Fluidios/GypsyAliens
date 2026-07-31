@@ -232,6 +232,8 @@ namespace GypsyAliens.EditorTools
             go.AddComponent<NetworkCharacterController>();
             go.AddComponent<NetworkPlayerController>();
             go.AddComponent<PlayerAnimationDriver>();
+            var silhouette = go.AddComponent<GypsyAliens.Rendering.OcclusionSilhouette>();
+            silhouette.Color = GypsyAliens.Rendering.OcclusionSilhouette.PlayerColor;
 
             var dummyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DummyPath);
             if (dummyPrefab != null)
