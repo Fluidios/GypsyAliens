@@ -1,0 +1,554 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using GypsyAliens.Core;
+using UnityEngine;
+
+namespace GypsyAliens.Level
+{
+    /// <summary>
+    /// Contiguous rooms on a shared grid. Shared walls with a clear 2-cell doorway.
+    /// Builds a navigation graph and assigns Floor/Wall physics layers.
+    /// </summary>
+    public sealed class ProceduralBuildingGenerator : MonoBehaviour
+    {
+        const int DoorWidthCells = 2;
+
+        [SerializeField] BuildingTileSet _tileSet;
+        [SerializeField] Transform _levelRoot;
+        [SerializeField] int _gridWidth = 3;
+        [SerializeField] int _gridHeight = 3;
+        [SerializeField] int _minRooms = 5;
+        [SerializeField] int _maxRooms = 8;
+        [SerializeField] int _roomSize = 7;
+        [SerializeField] float _spawnHeight = 0.15f;
+        [SerializeField] int _yieldEveryRooms = 1;
+
+        public Vector3 SpawnPosition { get; private set; }
+        public bool HasSpawnPoint { get; private set; }
+        public bool IsReady { get; private set; }
+        public bool IsGenerating { get; private set; }
+        public LevelNavigationMap NavigationMap { get; private set; }
+
+        public event Action GenerationStarted;
+        public event Action LevelReady;
+
+        public void SetTileSet(BuildingTileSet tileSet) => _tileSet = tileSet;
+
+        public void SetLevelRoot(Transform levelRoot) => _levelRoot = levelRoot;
+
+        public void Generate(int seed)
+        {
+            var enumerator = GenerateRoutine(seed);
+            while (enumerator.MoveNext())
+            {
+            }
+        }
+
+        public IEnumerator GenerateRoutine(int seed)
+        {
+            IsReady = false;
+            HasSpawnPoint = false;
+            IsGenerating = true;
+            NavigationMap = null;
+            GenerationStarted?.Invoke();
+            yield return null;
+
+            if (_tileSet == null)
+            {
+                Debug.LogError("ProceduralBuildingGenerator: BuildingTileSet is missing.", this);
+                IsGenerating = false;
+                yield break;
+            }
+
+            if (_levelRoot == null)
+            {
+                _levelRoot = new GameObject("LevelRoot").transform;
+            }
+
+            ClearLevel();
+            yield return null;
+
+            var size = Mathf.Max(DoorWidthCells + 2, _roomSize);
+            var rng = new System.Random(seed);
+            var rooms = BuildRoomGraph(rng);
+            var cell = _tileSet.CellSize;
+
+            foreach (var room in rooms)
+            {
+                room.MinX = room.GridPos.x * size;
+                room.MinZ = room.GridPos.y * size;
+                room.Size = size;
+            }
+
+            var parent = new GameObject("Building").transform;
+            parent.SetParent(_levelRoot, false);
+
+            var built = 0;
+            foreach (var room in rooms)
+            {
+                BuildFloors(room, parent, cell);
+                built++;
+                if (_yieldEveryRooms > 0 && built % _yieldEveryRooms == 0)
+                {
+                    yield return null;
+                }
+            }
+
+            var roomMap = new Dictionary<Vector2Int, RoomData>();
+            foreach (var room in rooms)
+            {
+                roomMap[room.GridPos] = room;
+            }
+
+            BuildWalls(rooms, roomMap, parent, cell);
+            NavigationMap = BuildNavigationMap(rooms, roomMap, cell);
+            yield return null;
+
+            if (rooms.Count > 0)
+            {
+                var first = rooms[0];
+                SpawnPosition = new Vector3(
+                    (first.MinX + first.Size * 0.5f) * cell,
+                    _spawnHeight,
+                    (first.MinZ + first.Size * 0.5f) * cell);
+                HasSpawnPoint = true;
+            }
+            else
+            {
+                SpawnPosition = new Vector3(0f, _spawnHeight, 0f);
+            }
+
+            Physics.SyncTransforms();
+            IsGenerating = false;
+            IsReady = HasSpawnPoint;
+            LevelReady?.Invoke();
+        }
+
+        void ClearLevel()
+        {
+            IsReady = false;
+            HasSpawnPoint = false;
+            NavigationMap = null;
+
+            for (var i = _levelRoot.childCount - 1; i >= 0; i--)
+            {
+                var child = _levelRoot.GetChild(i).gameObject;
+                if (Application.isPlaying)
+                {
+                    Destroy(child);
+                }
+                else
+                {
+                    DestroyImmediate(child);
+                }
+            }
+        }
+
+        List<RoomData> BuildRoomGraph(System.Random rng)
+        {
+            var targetRooms = Mathf.Clamp(rng.Next(_minRooms, _maxRooms + 1), 1, _gridWidth * _gridHeight);
+            var map = new Dictionary<Vector2Int, RoomData>();
+            var order = new List<RoomData>();
+            var directions = new[]
+            {
+                new Vector2Int(1, 0), new Vector2Int(-1, 0),
+                new Vector2Int(0, 1), new Vector2Int(0, -1),
+            };
+
+            order.Add(CreateRoom(Vector2Int.zero, map));
+
+            while (order.Count < targetRooms)
+            {
+                var candidates = new List<(RoomData room, Vector2Int next, Vector2Int dir)>();
+                foreach (var room in order)
+                {
+                    foreach (var dir in directions)
+                    {
+                        var next = room.GridPos + dir;
+                        if (next.x < 0 || next.y < 0 || next.x >= _gridWidth || next.y >= _gridHeight)
+                        {
+                            continue;
+                        }
+
+                        if (map.ContainsKey(next))
+                        {
+                            continue;
+                        }
+
+                        candidates.Add((room, next, dir));
+                    }
+                }
+
+                if (candidates.Count == 0)
+                {
+                    break;
+                }
+
+                var pick = candidates[rng.Next(candidates.Count)];
+                var created = CreateRoom(pick.next, map);
+                order.Add(created);
+                pick.room.Connections.Add(pick.dir);
+                created.Connections.Add(new Vector2Int(-pick.dir.x, -pick.dir.y));
+            }
+
+            // Assign stable ids.
+            for (var i = 0; i < order.Count; i++)
+            {
+                order[i].Id = i;
+            }
+
+            return order;
+        }
+
+        static RoomData CreateRoom(Vector2Int cell, Dictionary<Vector2Int, RoomData> map)
+        {
+            var room = new RoomData(cell);
+            map[cell] = room;
+            return room;
+        }
+
+        void BuildFloors(RoomData room, Transform parent, float cell)
+        {
+            var roomRoot = new GameObject($"Room_{room.GridPos.x}_{room.GridPos.y}").transform;
+            roomRoot.SetParent(parent, false);
+
+            var floorLayer = GameLayers.Floor;
+            for (var x = 0; x < room.Size; x++)
+            {
+                for (var z = 0; z < room.Size; z++)
+                {
+                    var world = new Vector3((room.MinX + x) * cell, 0f, (room.MinZ + z) * cell);
+                    var floor = Spawn(_tileSet.FloorPrefab, roomRoot, world, Quaternion.identity);
+                    EnsureWalkableCollider(floor, cell);
+                    if (floor != null)
+                    {
+                        GameLayers.SetLayerRecursively(floor, floorLayer);
+                    }
+                }
+            }
+        }
+
+        void BuildWalls(
+            List<RoomData> rooms,
+            Dictionary<Vector2Int, RoomData> map,
+            Transform parent,
+            float cell)
+        {
+            var wallsRoot = new GameObject("Walls").transform;
+            wallsRoot.SetParent(parent, false);
+
+            foreach (var room in rooms)
+            {
+                BuildEdge(room, map, wallsRoot, cell, Vector2Int.up);
+                BuildEdge(room, map, wallsRoot, cell, Vector2Int.down);
+                BuildEdge(room, map, wallsRoot, cell, Vector2Int.right);
+                BuildEdge(room, map, wallsRoot, cell, Vector2Int.left);
+            }
+        }
+
+        void BuildEdge(
+            RoomData room,
+            Dictionary<Vector2Int, RoomData> map,
+            Transform parent,
+            float cell,
+            Vector2Int dir)
+        {
+            var neighborPos = room.GridPos + dir;
+            var hasNeighbor = map.ContainsKey(neighborPos);
+            if (hasNeighbor && !IsWallOwner(room.GridPos, neighborPos))
+            {
+                return;
+            }
+
+            var size = room.Size;
+            var doorStart = hasNeighbor ? (size - DoorWidthCells) / 2 : -1;
+            var alongX = dir.x == 0;
+            var wallLayer = GameLayers.Wall;
+
+            for (var i = 0; i < size; i++)
+            {
+                if (doorStart >= 0 && i >= doorStart && i < doorStart + DoorWidthCells)
+                {
+                    continue;
+                }
+
+                var wall = PlaceUnitWall(room, parent, cell, dir, alongX, i);
+                if (wall != null)
+                {
+                    GameLayers.SetLayerRecursively(wall, wallLayer);
+                }
+            }
+
+            if (doorStart >= 0 && _tileSet.DoorWallPrefab != null)
+            {
+                var door = PlaceDoorWall(room, parent, cell, dir, alongX, doorStart);
+                if (door != null)
+                {
+                    // Same layer as walls for X-ray; colliders are triggers so they never block movement/clicks.
+                    GameLayers.SetLayerRecursively(door, wallLayer);
+                }
+            }
+        }
+
+        LevelNavigationMap BuildNavigationMap(
+            List<RoomData> rooms,
+            Dictionary<Vector2Int, RoomData> map,
+            float cell)
+        {
+            var nodes = new List<RoomNavNode>(rooms.Count);
+            var byGrid = new Dictionary<Vector2Int, RoomNavNode>();
+
+            foreach (var room in rooms)
+            {
+                var node = new RoomNavNode
+                {
+                    Id = room.Id,
+                    GridPos = room.GridPos,
+                    Bounds = new Rect(
+                        room.MinX * cell,
+                        room.MinZ * cell,
+                        room.Size * cell,
+                        room.Size * cell),
+                    Center = new Vector3(
+                        (room.MinX + room.Size * 0.5f) * cell,
+                        _spawnHeight,
+                        (room.MinZ + room.Size * 0.5f) * cell),
+                };
+                nodes.Add(node);
+                byGrid[room.GridPos] = node;
+            }
+
+            foreach (var room in rooms)
+            {
+                var from = byGrid[room.GridPos];
+                foreach (var dir in room.Connections)
+                {
+                    var neighborPos = room.GridPos + dir;
+                    if (!byGrid.TryGetValue(neighborPos, out var to))
+                    {
+                        continue;
+                    }
+
+                    // Only author each door once from the wall owner side, but add links both ways.
+                    if (!IsWallOwner(room.GridPos, neighborPos))
+                    {
+                        continue;
+                    }
+
+                    var doorPos = GetDoorWorldPosition(room, dir, cell);
+                    from.Doors.Add(new RoomDoorLink
+                    {
+                        FromRoomId = from.Id,
+                        ToRoomId = to.Id,
+                        DoorPosition = doorPos,
+                    });
+                    to.Doors.Add(new RoomDoorLink
+                    {
+                        FromRoomId = to.Id,
+                        ToRoomId = from.Id,
+                        DoorPosition = doorPos,
+                    });
+                }
+            }
+
+            // Also link rooms that touch even if Connections missed (adjacent square fill).
+            foreach (var room in rooms)
+            {
+                var from = byGrid[room.GridPos];
+                foreach (var dir in new[] { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right })
+                {
+                    var neighborPos = room.GridPos + dir;
+                    if (!byGrid.TryGetValue(neighborPos, out var to))
+                    {
+                        continue;
+                    }
+
+                    if (!IsWallOwner(room.GridPos, neighborPos))
+                    {
+                        continue;
+                    }
+
+                    if (HasDoorLink(from, to.Id))
+                    {
+                        continue;
+                    }
+
+                    var doorPos = GetDoorWorldPosition(room, dir, cell);
+                    from.Doors.Add(new RoomDoorLink
+                    {
+                        FromRoomId = from.Id,
+                        ToRoomId = to.Id,
+                        DoorPosition = doorPos,
+                    });
+                    to.Doors.Add(new RoomDoorLink
+                    {
+                        FromRoomId = to.Id,
+                        ToRoomId = from.Id,
+                        DoorPosition = doorPos,
+                    });
+                }
+            }
+
+            return new LevelNavigationMap(nodes);
+        }
+
+        static bool HasDoorLink(RoomNavNode from, int toId)
+        {
+            foreach (var door in from.Doors)
+            {
+                if (door.ToRoomId == toId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        Vector3 GetDoorWorldPosition(RoomData room, Vector2Int dir, float cell)
+        {
+            var size = room.Size;
+            var doorStart = (size - DoorWidthCells) / 2;
+            var doorMid = doorStart + DoorWidthCells * 0.5f;
+
+            if (dir.x == 0)
+            {
+                var z = dir.y > 0 ? room.MinZ + size : room.MinZ;
+                return new Vector3((room.MinX + doorMid) * cell, _spawnHeight, z * cell);
+            }
+
+            var x = dir.x > 0 ? room.MinX + size : room.MinX;
+            return new Vector3(x * cell, _spawnHeight, (room.MinZ + doorMid) * cell);
+        }
+
+        GameObject PlaceUnitWall(RoomData room, Transform parent, float cell, Vector2Int dir, bool alongX, int index)
+        {
+            GetEdgePose(room, cell, dir, alongX, index, out var pos, out var rot);
+            return Spawn(_tileSet.WallPrefab, parent, pos, rot);
+        }
+
+        GameObject PlaceDoorWall(RoomData room, Transform parent, float cell, Vector2Int dir, bool alongX, int doorStart)
+        {
+            GetEdgePose(room, cell, dir, alongX, doorStart, out var pos, out var rot);
+            var door = Spawn(_tileSet.DoorWallPrefab, parent, pos, rot);
+            if (door == null)
+            {
+                return null;
+            }
+
+            // Non-convex MeshColliders cannot be triggers — replace with a trigger box for X-ray overlap.
+            foreach (var col in door.GetComponentsInChildren<Collider>())
+            {
+                if (col == null)
+                {
+                    continue;
+                }
+
+                if (Application.isPlaying)
+                {
+                    UnityEngine.Object.Destroy(col);
+                }
+                else
+                {
+                    UnityEngine.Object.DestroyImmediate(col);
+                }
+            }
+
+            var renderer = door.GetComponentInChildren<Renderer>();
+            var box = door.AddComponent<BoxCollider>();
+            box.isTrigger = true;
+            if (renderer != null)
+            {
+                var localBounds = GetLocalRendererBounds(door.transform, renderer);
+                box.center = localBounds.center;
+                box.size = localBounds.size;
+            }
+
+            return door;
+        }
+
+        static Bounds GetLocalRendererBounds(Transform root, Renderer renderer)
+        {
+            var world = renderer.bounds;
+            var localCenter = root.InverseTransformPoint(world.center);
+            var axisX = root.InverseTransformVector(new Vector3(world.size.x, 0f, 0f));
+            var axisY = root.InverseTransformVector(new Vector3(0f, world.size.y, 0f));
+            var axisZ = root.InverseTransformVector(new Vector3(0f, 0f, world.size.z));
+            var localSize = new Vector3(
+                Mathf.Abs(axisX.x) + Mathf.Abs(axisY.x) + Mathf.Abs(axisZ.x),
+                Mathf.Abs(axisX.y) + Mathf.Abs(axisY.y) + Mathf.Abs(axisZ.y),
+                Mathf.Abs(axisX.z) + Mathf.Abs(axisY.z) + Mathf.Abs(axisZ.z));
+            return new Bounds(localCenter, localSize);
+        }
+
+        static void GetEdgePose(
+            RoomData room,
+            float cell,
+            Vector2Int dir,
+            bool alongX,
+            int index,
+            out Vector3 pos,
+            out Quaternion rot)
+        {
+            if (alongX)
+            {
+                var z = dir.y > 0 ? room.MinZ + room.Size : room.MinZ;
+                pos = new Vector3((room.MinX + index) * cell, 0f, z * cell);
+                rot = Quaternion.identity;
+            }
+            else
+            {
+                var x = dir.x > 0 ? room.MinX + room.Size : room.MinX;
+                pos = new Vector3(x * cell, 0f, (room.MinZ + index) * cell);
+                rot = Quaternion.Euler(0f, -90f, 0f);
+            }
+        }
+
+        static bool IsWallOwner(Vector2Int a, Vector2Int b)
+        {
+            if (a.x != b.x)
+            {
+                return a.x < b.x;
+            }
+
+            return a.y < b.y;
+        }
+
+        static void EnsureWalkableCollider(GameObject floorInstance, float cell)
+        {
+            if (floorInstance == null || floorInstance.GetComponent<BoxCollider>() != null)
+            {
+                return;
+            }
+
+            var box = floorInstance.AddComponent<BoxCollider>();
+            box.center = new Vector3(0.5f * cell, -0.05f, 0.5f * cell);
+            box.size = new Vector3(cell, 0.1f, cell);
+        }
+
+        GameObject Spawn(GameObject prefab, Transform parent, Vector3 worldPosition, Quaternion worldRotation)
+        {
+            if (prefab == null)
+            {
+                return null;
+            }
+
+            var instance = Instantiate(prefab, parent);
+            instance.transform.SetPositionAndRotation(worldPosition, worldRotation);
+            return instance;
+        }
+
+        sealed class RoomData
+        {
+            public int Id;
+            public Vector2Int GridPos;
+            public int MinX;
+            public int MinZ;
+            public int Size;
+            public List<Vector2Int> Connections = new List<Vector2Int>();
+
+            public RoomData(Vector2Int gridPos) => GridPos = gridPos;
+        }
+    }
+}
