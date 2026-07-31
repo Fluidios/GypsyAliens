@@ -30,6 +30,16 @@ namespace GypsyAliens.EditorTools
         const string FloorPath = "Assets/Synty/PolygonPrototype/Prefabs/Buildings/Simple/SM_Buildings_Floor_1x1_01.prefab";
         const string WallPath = "Assets/Synty/PolygonPrototype/Prefabs/Buildings/Simple/SM_Buildings_Wall_1x3_01.prefab";
         const string DoorWallPath = "Assets/Synty/PolygonPrototype/Prefabs/Buildings/Simple/SM_Buildings_WallDoor_2x3_01.prefab";
+        static readonly string[] RoomPropPaths =
+        {
+            "Assets/Synty/PolygonPrototype/Prefabs/Props/SM_Prop_Crate_01.prefab",
+            "Assets/Synty/PolygonPrototype/Prefabs/Props/SM_Prop_Crate_02.prefab",
+            "Assets/Synty/PolygonPrototype/Prefabs/Props/SM_Prop_Barrel_01.prefab",
+            "Assets/Synty/PolygonPrototype/Prefabs/Props/SM_Prop_Cone_01.prefab",
+            "Assets/Synty/PolygonPrototype/Prefabs/Props/SM_Prop_Vase_01.prefab",
+            "Assets/Synty/PolygonPrototype/Prefabs/Props/SM_Prop_Barrier_01.prefab",
+            "Assets/Synty/PolygonPrototype/Prefabs/Props/SM_Prop_WoodPlank_01.prefab",
+        };
         const string DummyPath = "Assets/Alien/Mr Grey.fbx";
         const string IdleClipPath = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Idles/HumanM@Idle01.fbx";
         const string WalkClipPath = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Movement/Walk/HumanM@Walk01_Forward.fbx";
@@ -147,6 +157,15 @@ namespace GypsyAliens.EditorTools
             so.FindProperty("_wallPrefab").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>(WallPath);
             so.FindProperty("_doorWallPrefab").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>(DoorWallPath);
             so.FindProperty("_cellSize").floatValue = 1f;
+
+            var propsProp = so.FindProperty("_roomPropPrefabs");
+            propsProp.arraySize = RoomPropPaths.Length;
+            for (var i = 0; i < RoomPropPaths.Length; i++)
+            {
+                propsProp.GetArrayElementAtIndex(i).objectReferenceValue =
+                    AssetDatabase.LoadAssetAtPath<GameObject>(RoomPropPaths[i]);
+            }
+
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(asset);
             return asset;

@@ -25,9 +25,13 @@ namespace GypsyAliens.Npc
 
         /// <summary>
         /// Returns true if any active noise radius covers <paramref name="listenerWorld"/>.
-        /// Picks the nearest source center.
+        /// Picks the nearest source center. Optionally ignores sources under <paramref name="ignoreRoot"/>.
         /// </summary>
-        public static bool TryGetAudible(Vector3 listenerWorld, out Vector3 sourcePosition, out float radius)
+        public static bool TryGetAudible(
+            Vector3 listenerWorld,
+            out Vector3 sourcePosition,
+            out float radius,
+            Transform ignoreRoot = null)
         {
             sourcePosition = listenerWorld;
             radius = 0f;
@@ -44,6 +48,12 @@ namespace GypsyAliens.Npc
                 }
 
                 if (!src.IsAudible)
+                {
+                    continue;
+                }
+
+                if (ignoreRoot != null
+                    && (src.transform == ignoreRoot || src.transform.IsChildOf(ignoreRoot)))
                 {
                     continue;
                 }

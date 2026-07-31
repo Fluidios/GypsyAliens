@@ -232,9 +232,21 @@ namespace GypsyAliens.Npc
             if (_detectTimer <= 0f)
             {
                 _detectTimer = _detectInterval;
-                if ((_state == AiState.Wander || _state == AiState.Flee) && TryDetectPlayer(out _))
+                if (_state == AiState.Wander || _state == AiState.Flee)
                 {
-                    BeginFlee();
+                    if (TryDetectPlayer(out var player))
+                    {
+                        BeginFlee(player.position, avoidPlayerRooms: true);
+                    }
+                    else if (NoiseRegistry.TryGetAudible(
+                                 transform.position,
+                                 out var noisePos,
+                                 out _,
+                                 ignoreRoot: transform))
+                    {
+                        // Flee away from the noise — can be herded toward the thrower.
+                        BeginFlee(noisePos, avoidPlayerRooms: false);
+                    }
                 }
             }
 
@@ -687,14 +699,23 @@ namespace GypsyAliens.Npc
             return false;
         }
 
-        void BeginFlee()
+        void BeginFlee(Vector3 threatWorld, bool avoidPlayerRooms)
         {
-            if (!TryPickFleeRoom(out var room))
+            if (!TryPickFleeRoom(threatWorld, avoidPlayerRooms, out var room))
             {
                 return;
             }
 
             var destination = room.Center;
+            // Bias destination slightly away from the threat inside the target room.
+            var away = destination - threatWorld;
+            away.y = 0f;
+            if (away.sqrMagnitude > 0.01f)
+            {
+                away.Normalize();
+                destination += away * 1.2f;
+            }
+
             destination.y = transform.position.y;
 
             ClearPath();
@@ -713,7 +734,7 @@ namespace GypsyAliens.Npc
             }
         }
 
-        bool TryPickFleeRoom(out RoomNavNode room)
+        bool TryPickFleeRoom(Vector3 threatWorld, bool avoidPlayerRooms, out RoomNavNode room)
         {
             room = null;
             if (SystemLocator.Instance == null
@@ -730,7 +751,11 @@ namespace GypsyAliens.Npc
                 return false;
             }
 
-            CollectOccupiedRoomIds(map, out var occupied);
+            HashSet<int> occupied = null;
+            if (avoidPlayerRooms)
+            {
+                CollectOccupiedRoomIds(map, out occupied);
+            }
 
             _candidateRooms.Clear();
             foreach (var door in current.Doors)
@@ -740,7 +765,12 @@ namespace GypsyAliens.Npc
                     continue;
                 }
 
-                if (occupied.Contains(neighbor.Id) || neighbor.Id == current.Id)
+                if (neighbor.Id == current.Id)
+                {
+                    continue;
+                }
+
+                if (occupied != null && occupied.Contains(neighbor.Id))
                 {
                     continue;
                 }
@@ -752,7 +782,12 @@ namespace GypsyAliens.Npc
             {
                 foreach (var candidate in map.Rooms)
                 {
-                    if (candidate.Id == current.Id || occupied.Contains(candidate.Id))
+                    if (candidate.Id == current.Id)
+                    {
+                        continue;
+                    }
+
+                    if (occupied != null && occupied.Contains(candidate.Id))
                     {
                         continue;
                     }
@@ -766,7 +801,22 @@ namespace GypsyAliens.Npc
                 return false;
             }
 
-            room = _candidateRooms[Random.Range(0, _candidateRooms.Count)];
+            // Prefer the room farthest from the threat (away from player / rock noise).
+            room = _candidateRooms[0];
+            var best = -1f;
+            for (var i = 0; i < _candidateRooms.Count; i++)
+            {
+                var c = _candidateRooms[i].Center;
+                var dx = c.x - threatWorld.x;
+                var dz = c.z - threatWorld.z;
+                var d = dx * dx + dz * dz;
+                if (d > best)
+                {
+                    best = d;
+                    room = _candidateRooms[i];
+                }
+            }
+
             return true;
         }
 

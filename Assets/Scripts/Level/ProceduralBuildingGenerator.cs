@@ -23,6 +23,9 @@ namespace GypsyAliens.Level
         [SerializeField] int _roomSize = 10;
         [SerializeField] float _spawnHeight = 0.15f;
         [SerializeField] int _yieldEveryRooms = 1;
+        [SerializeField, Range(0f, 1f)] float _propChancePerSlot = 0.63f;
+        [SerializeField] float _propInsetCells = 0.85f;
+        [SerializeField] float _propWallClearance = 0.12f;
 
         public Vector3 SpawnPosition { get; private set; }
         public bool HasSpawnPoint { get; private set; }
@@ -102,6 +105,7 @@ namespace GypsyAliens.Level
             }
 
             BuildWalls(rooms, roomMap, parent, cell);
+            BuildRoomProps(rooms, roomMap, parent, cell, rng);
             NavigationMap = BuildNavigationMap(rooms, roomMap, cell);
             yield return null;
 
@@ -246,6 +250,269 @@ namespace GypsyAliens.Level
                 BuildEdge(room, map, wallsRoot, cell, Vector2Int.left);
             }
         }
+
+        /// <summary>
+        /// Places small props along each room's inner wall perimeter (skipping doorways).
+        /// Uses Default layer (not Wall) so X-ray never fades them; colliders still block near walls.
+        /// </summary>
+        void BuildRoomProps(
+            List<RoomData> rooms,
+            Dictionary<Vector2Int, RoomData> map,
+            Transform parent,
+            float cell,
+            System.Random rng)
+        {
+            var prefabs = _tileSet.RoomPropPrefabs;
+            if (prefabs == null || prefabs.Length == 0)
+            {
+                return;
+            }
+
+            var valid = 0;
+            for (var i = 0; i < prefabs.Length; i++)
+            {
+                if (prefabs[i] != null)
+                {
+                    valid++;
+                }
+            }
+
+            if (valid == 0)
+            {
+                return;
+            }
+
+            var propsRoot = new GameObject("RoomProps").transform;
+            propsRoot.SetParent(parent, false);
+            var inset = Mathf.Clamp(_propInsetCells, 0.35f, 2f) * cell;
+            var chance = Mathf.Clamp01(_propChancePerSlot);
+            var clearance = Mathf.Max(0.05f, _propWallClearance);
+
+            foreach (var room in rooms)
+            {
+                PlacePropsAlongEdge(room, map, propsRoot, cell, inset, chance, clearance, prefabs, rng, Vector2Int.up);
+                PlacePropsAlongEdge(room, map, propsRoot, cell, inset, chance, clearance, prefabs, rng, Vector2Int.down);
+                PlacePropsAlongEdge(room, map, propsRoot, cell, inset, chance, clearance, prefabs, rng, Vector2Int.right);
+                PlacePropsAlongEdge(room, map, propsRoot, cell, inset, chance, clearance, prefabs, rng, Vector2Int.left);
+            }
+        }
+
+        void PlacePropsAlongEdge(
+            RoomData room,
+            Dictionary<Vector2Int, RoomData> map,
+            Transform parent,
+            float cell,
+            float inset,
+            float chance,
+            float clearance,
+            GameObject[] prefabs,
+            System.Random rng,
+            Vector2Int dir)
+        {
+            var size = room.Size;
+            var hasNeighbor = map.ContainsKey(room.GridPos + dir);
+            var doorStart = hasNeighbor ? (size - DoorWidthCells) / 2 : -1;
+            // Skip corner cells so adjacent edges don't double-stack props.
+            for (var i = 1; i < size - 1; i++)
+            {
+                if (doorStart >= 0 && i >= doorStart && i < doorStart + DoorWidthCells)
+                {
+                    continue;
+                }
+
+                // Also skip one cell beside doorways for clearance.
+                if (doorStart >= 0
+                    && (i == doorStart - 1 || i == doorStart + DoorWidthCells))
+                {
+                    continue;
+                }
+
+                if (rng.NextDouble() > chance)
+                {
+                    continue;
+                }
+
+                var prefab = prefabs[rng.Next(prefabs.Length)];
+                if (prefab == null)
+                {
+                    continue;
+                }
+
+                GetPerimeterPropPose(room, cell, inset, dir, i, out var pos, out var rot);
+                var prop = Spawn(prefab, parent, pos, rot);
+                if (prop == null)
+                {
+                    continue;
+                }
+
+                OrientPropFlatAgainstWall(prop, dir, rot);
+                EnsurePropCollider(prop);
+                SnapPropClearOfWall(prop, room, cell, dir, clearance);
+            }
+        }
+
+        static void GetPerimeterPropPose(
+            RoomData room,
+            float cell,
+            float inset,
+            Vector2Int dir,
+            int index,
+            out Vector3 pos,
+            out Quaternion rot)
+        {
+            var size = room.Size;
+            // Wall faces outward; props sit just inside the room.
+            if (dir.y > 0)
+            {
+                pos = new Vector3((room.MinX + index + 0.5f) * cell, 0f, (room.MinZ + size) * cell - inset);
+                rot = Quaternion.identity;
+            }
+            else if (dir.y < 0)
+            {
+                pos = new Vector3((room.MinX + index + 0.5f) * cell, 0f, room.MinZ * cell + inset);
+                rot = Quaternion.identity;
+            }
+            else if (dir.x > 0)
+            {
+                pos = new Vector3((room.MinX + size) * cell - inset, 0f, (room.MinZ + index + 0.5f) * cell);
+                rot = Quaternion.identity;
+            }
+            else
+            {
+                pos = new Vector3(room.MinX * cell + inset, 0f, (room.MinZ + index + 0.5f) * cell);
+                rot = Quaternion.identity;
+            }
+        }
+
+        /// <summary>
+        /// Picks a 90° yaw that minimizes depth into the room (thin side faces the wall).
+        /// </summary>
+        static void OrientPropFlatAgainstWall(GameObject prop, Vector2Int dir, Quaternion baseRot)
+        {
+            var t = prop.transform;
+            var origin = t.position;
+            var bestYaw = 0;
+            var bestDepth = float.MaxValue;
+
+            for (var yaw = 0; yaw < 4; yaw++)
+            {
+                t.SetPositionAndRotation(origin, baseRot * Quaternion.Euler(0f, yaw * 90f, 0f));
+                var bounds = GetWorldBounds(prop);
+                var depth = dir.x != 0 ? bounds.size.x : bounds.size.z;
+                if (depth < bestDepth)
+                {
+                    bestDepth = depth;
+                    bestYaw = yaw;
+                }
+            }
+
+            t.SetPositionAndRotation(origin, baseRot * Quaternion.Euler(0f, bestYaw * 90f, 0f));
+        }
+
+        /// <summary>
+        /// Pushes the prop inward until its world bounds clear the wall plane by <paramref name="clearance"/>.
+        /// </summary>
+        static void SnapPropClearOfWall(
+            GameObject prop,
+            RoomData room,
+            float cell,
+            Vector2Int dir,
+            float clearance)
+        {
+            var bounds = GetWorldBounds(prop);
+            var t = prop.transform;
+            var size = room.Size;
+
+            if (dir.y > 0)
+            {
+                var wallZ = (room.MinZ + size) * cell;
+                var overflow = bounds.max.z - (wallZ - clearance);
+                if (overflow > 0f)
+                {
+                    t.position += new Vector3(0f, 0f, -overflow);
+                }
+            }
+            else if (dir.y < 0)
+            {
+                var wallZ = room.MinZ * cell;
+                var overflow = (wallZ + clearance) - bounds.min.z;
+                if (overflow > 0f)
+                {
+                    t.position += new Vector3(0f, 0f, overflow);
+                }
+            }
+            else if (dir.x > 0)
+            {
+                var wallX = (room.MinX + size) * cell;
+                var overflow = bounds.max.x - (wallX - clearance);
+                if (overflow > 0f)
+                {
+                    t.position += new Vector3(-overflow, 0f, 0f);
+                }
+            }
+            else
+            {
+                var wallX = room.MinX * cell;
+                var overflow = (wallX + clearance) - bounds.min.x;
+                if (overflow > 0f)
+                {
+                    t.position += new Vector3(overflow, 0f, 0f);
+                }
+            }
+        }
+
+        static Bounds GetWorldBounds(GameObject go)
+        {
+            var renderers = go.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0)
+            {
+                return new Bounds(go.transform.position, Vector3.one * 0.5f);
+            }
+
+            var bounds = renderers[0].bounds;
+            for (var i = 1; i < renderers.Length; i++)
+            {
+                if (renderers[i] != null)
+                {
+                    bounds.Encapsulate(renderers[i].bounds);
+                }
+            }
+
+            return bounds;
+        }
+
+        static void EnsurePropCollider(GameObject prop)
+        {
+            if (prop == null)
+            {
+                return;
+            }
+
+            if (prop.GetComponentInChildren<Collider>() != null)
+            {
+                return;
+            }
+
+            var renderer = prop.GetComponentInChildren<Renderer>();
+            var box = prop.AddComponent<BoxCollider>();
+            if (renderer != null)
+            {
+                var b = renderer.bounds;
+                box.center = prop.transform.InverseTransformPoint(b.center);
+                var lossy = prop.transform.lossyScale;
+                box.size = new Vector3(
+                    SafeDiv(b.size.x, lossy.x),
+                    SafeDiv(b.size.y, lossy.y),
+                    SafeDiv(b.size.z, lossy.z));
+            }
+            else
+            {
+                box.size = new Vector3(0.6f, 0.8f, 0.6f);
+                box.center = new Vector3(0f, 0.4f, 0f);
+            }
+        }
+
+        static float SafeDiv(float a, float b) => Mathf.Abs(b) < 0.0001f ? a : a / b;
 
         void BuildEdge(
             RoomData room,

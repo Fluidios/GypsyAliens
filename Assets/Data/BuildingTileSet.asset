@@ -15,4 +15,12 @@ MonoBehaviour:
   _floorPrefab: {fileID: 1906015796387160, guid: 9b8802d83e59c8c448a7665322aa7d17, type: 3}
   _wallPrefab: {fileID: 1329778260234454, guid: df31c83b27360844d9c8bb3549762491, type: 3}
   _doorWallPrefab: {fileID: 1274681056948942, guid: 19b73e565ad468d41b78dad854dab176, type: 3}
+  _roomPropPrefabs:
+  - {fileID: 1852967516923486, guid: e1b9e21039285c042b92ea66c7f1c444, type: 3}
+  - {fileID: 1737046982831056, guid: 21b750dc08701d74581686df5b328359, type: 3}
+  - {fileID: 1547116696582102, guid: f750d5f061e724f4c827ab6b376e2550, type: 3}
+  - {fileID: 1250922492522612, guid: 517a8607e4b54054b9216e69695d6e53, type: 3}
+  - {fileID: 1787808881713768, guid: 631e0fedef72ee24fa49b2748b197947, type: 3}
+  - {fileID: 1217059779380092, guid: aa853ab45e8959d4cb3e2c261805e8f3, type: 3}
+  - {fileID: 1768140634152778, guid: 7affb776ee83c8e4c8d7ab25aff32905, type: 3}
   _cellSize: 1
