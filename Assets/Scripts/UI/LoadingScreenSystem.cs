@@ -1,12 +1,13 @@
 using GypsyAliens.Core;
 using GypsyAliens.Level;
+using GypsyAliens.Network;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace GypsyAliens.UI
 {
     /// <summary>
-    /// Fullscreen loading overlay shown while connecting / generating the level.
+    /// Fullscreen loading overlay shown while connecting / generating / spawning NPCs.
     /// </summary>
     public sealed class LoadingScreenSystem : GameSystemBehaviour<LoadingScreenSystem>
     {
@@ -16,9 +17,12 @@ namespace GypsyAliens.UI
         [SerializeField] float _fakeProgressSpeed = 0.35f;
         [SerializeField] string _connectingMessage = "Connecting...";
         [SerializeField] string _generatingMessage = "Generating location...";
+        [SerializeField] string _preparingMessage = "Preparing location...";
 
         bool _visible;
         float _displayProgress;
+        bool _boundSession;
+        NetworkGameSession _session;
 
         protected override void Awake()
         {
@@ -34,12 +38,24 @@ namespace GypsyAliens.UI
 
         void Start()
         {
-            // Level system may register after this Awake depending on hierarchy order.
             if (SystemLocator.Instance != null
                 && SystemLocator.Instance.TryGet<LevelGenerationSystem>(out var level))
             {
                 BindLevel(level);
             }
+        }
+
+        void Update()
+        {
+            TryBindSession();
+
+            if (!_visible || _progressFill == null)
+            {
+                return;
+            }
+
+            _displayProgress = Mathf.MoveTowards(_displayProgress, 0.92f, _fakeProgressSpeed * Time.deltaTime);
+            _progressFill.fillAmount = _displayProgress;
         }
 
         protected override void OnDestroy()
@@ -51,6 +67,7 @@ namespace GypsyAliens.UI
                 level.LevelReady -= OnLevelReady;
             }
 
+            UnbindSession();
             base.OnDestroy();
         }
 
@@ -62,15 +79,39 @@ namespace GypsyAliens.UI
             level.LevelReady += OnLevelReady;
         }
 
-        void Update()
+        void TryBindSession()
         {
-            if (!_visible || _progressFill == null)
+            if (_boundSession && _session != null)
             {
                 return;
             }
 
-            _displayProgress = Mathf.MoveTowards(_displayProgress, 0.92f, _fakeProgressSpeed * Time.deltaTime);
-            _progressFill.fillAmount = _displayProgress;
+            var session = NetworkGameSession.Instance;
+            if (session == null)
+            {
+                return;
+            }
+
+            UnbindSession();
+            _session = session;
+            _session.GameplayReadyChanged += OnGameplayReadyChanged;
+            _boundSession = true;
+
+            if (_session.GameplayReady)
+            {
+                Hide();
+            }
+        }
+
+        void UnbindSession()
+        {
+            if (_session != null)
+            {
+                _session.GameplayReadyChanged -= OnGameplayReadyChanged;
+            }
+
+            _session = null;
+            _boundSession = false;
         }
 
         public void ShowConnecting() => Show(_connectingMessage);
@@ -119,6 +160,33 @@ namespace GypsyAliens.UI
 
         void OnGenerationStarted() => ShowGenerating();
 
-        void OnLevelReady() => Hide();
+        void OnLevelReady()
+        {
+            // Keep overlay up until host marks GameplayReady (NPCs spawned).
+            Show(_preparingMessage);
+            TryBindSession();
+            if (_session != null && _session.GameplayReady)
+            {
+                Hide();
+            }
+        }
+
+        void OnGameplayReadyChanged()
+        {
+            if (_session == null || !_session.GameplayReady)
+            {
+                return;
+            }
+
+            // Don't hide until local generation finished.
+            if (SystemLocator.Instance != null
+                && SystemLocator.Instance.TryGet<LevelGenerationSystem>(out var level)
+                && !level.IsReady)
+            {
+                return;
+            }
+
+            Hide();
+        }
     }
 }

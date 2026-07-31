@@ -7,28 +7,76 @@ namespace GypsyAliens.Network
 {
     /// <summary>
     /// Networked session state. Host owns the level seed; all peers generate locally.
+    /// GameplayReady becomes true after host has spawned level NPCs.
     /// </summary>
     public sealed class NetworkGameSession : NetworkBehaviour
     {
         [Networked, OnChangedRender(nameof(OnLevelSeedChanged))]
         public int LevelSeed { get; set; }
 
+        [Networked, OnChangedRender(nameof(OnGameplayReadyChanged))]
+        public NetworkBool GameplayReady { get; set; }
+
         bool _generatedForSeed;
+
+        public static NetworkGameSession Instance { get; private set; }
+
+        public event System.Action GameplayReadyChanged;
 
         public override void Spawned()
         {
-            if (HasStateAuthority && LevelSeed == 0)
+            Instance = this;
+
+            if (HasStateAuthority)
             {
-                LevelSeed = UnityEngine.Random.Range(1, int.MaxValue);
+                GameplayReady = false;
+                if (LevelSeed == 0)
+                {
+                    LevelSeed = UnityEngine.Random.Range(1, int.MaxValue);
+                }
             }
 
             TryGenerate();
+            NotifyGameplayReadyChanged();
+        }
+
+        public override void Despawned(NetworkRunner runner, bool hasState)
+        {
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+        }
+
+        public void MarkGameplayReady()
+        {
+            if (!HasStateAuthority)
+            {
+                return;
+            }
+
+            GameplayReady = true;
         }
 
         void OnLevelSeedChanged()
         {
             _generatedForSeed = false;
+            if (HasStateAuthority)
+            {
+                GameplayReady = false;
+            }
+
             TryGenerate();
+        }
+
+        void OnGameplayReadyChanged()
+        {
+            NotifyGameplayReadyChanged();
+        }
+
+        void NotifyGameplayReadyChanged()
+        {
+            GameplayReadyChanged?.Invoke();
         }
 
         void TryGenerate()

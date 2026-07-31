@@ -1,12 +1,13 @@
 #if UNITY_EDITOR
 using System.IO;
-using System.IO;
 using Fusion;
 using Fusion.Editor;
 using GypsyAliens.Cameras;
 using GypsyAliens.Core;
 using GypsyAliens.Level;
 using GypsyAliens.Network;
+using GypsyAliens.Npc;
+using GypsyAliens.Rendering;
 using GypsyAliens.UI;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -33,6 +34,10 @@ namespace GypsyAliens.EditorTools
         const string IdleClipPath = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Idles/HumanM@Idle01.fbx";
         const string WalkClipPath = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Movement/Walk/HumanM@Walk01_Forward.fbx";
 
+        const string CatVisualPath = "Assets/PolyOne/Cartoon Dog, Cat/Prefab/SM_CartoonAnimal_Cat.prefab";
+        const string DogVisualPath = "Assets/PolyOne/Cartoon Dog, Cat/Prefab/SM_CartoonAnimal_Dog.prefab";
+        const string VisionConeMatPath = "Assets/Materials/VisionCone.mat";
+
         [MenuItem("GypsyAliens/Setup Prototype Scene")]
         public static void Setup()
         {
@@ -43,6 +48,8 @@ namespace GypsyAliens.EditorTools
             CreateRunnerPrefab();
             CreateSessionPrefab();
             CreatePlayerPrefab(animator);
+            var catNpc = CreateAnimalNpcPrefab("NetworkCatNpc", CatVisualPath);
+            var dogNpc = CreateAnimalNpcPrefab("NetworkDogNpc", DogVisualPath);
             var connectionMenuPrefab = CreateConnectionMenuPrefab();
 
             var runnerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabNetworkFolder + "/NetworkRunner.prefab")
@@ -52,7 +59,7 @@ namespace GypsyAliens.EditorTools
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabNetworkFolder + "/NetworkPlayer.prefab")
                 .GetComponent<NetworkObject>();
 
-            CreateGameScene(tileSet, runnerPrefab, sessionPrefab, playerPrefab, connectionMenuPrefab);
+            CreateGameScene(tileSet, runnerPrefab, sessionPrefab, playerPrefab, catNpc, dogNpc, connectionMenuPrefab);
 
             NetworkProjectConfigUtilities.RebuildPrefabTable();
             AssetDatabase.SaveAssets();
@@ -259,11 +266,92 @@ namespace GypsyAliens.EditorTools
             return prefab.GetComponent<NetworkObject>();
         }
 
+        static NetworkObject CreateAnimalNpcPrefab(string name, string visualPath)
+        {
+            EnsureFolders();
+            EnsureVisionConeMaterial();
+
+            var path = PrefabNetworkFolder + "/" + name + ".prefab";
+            var root = new GameObject(name);
+            root.AddComponent<NetworkObject>();
+            root.AddComponent<NetworkTransform>();
+
+            var cc = root.AddComponent<CharacterController>();
+            cc.height = 0.6f;
+            cc.radius = 0.25f;
+            cc.center = new Vector3(0f, 0.3f, 0f);
+            cc.skinWidth = 0.02f;
+
+            root.AddComponent<NetworkFearfulNpc>();
+            root.AddComponent<NpcAnimationDriver>();
+            var silhouette = root.AddComponent<OcclusionSilhouette>();
+            silhouette.Color = OcclusionSilhouette.NpcColor;
+
+            var visualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(visualPath);
+            if (visualPrefab != null)
+            {
+                var visual = (GameObject)PrefabUtility.InstantiatePrefab(visualPrefab);
+                visual.name = "Visual";
+                visual.transform.SetParent(root.transform, false);
+                var anim = visual.GetComponentInChildren<Animator>();
+                if (anim != null)
+                {
+                    anim.applyRootMotion = false;
+                    var adSo = new SerializedObject(root.GetComponent<NpcAnimationDriver>());
+                    adSo.FindProperty("_animator").objectReferenceValue = anim;
+                    adSo.ApplyModifiedPropertiesWithoutUndo();
+                }
+            }
+
+            var coneGo = new GameObject("VisionCone");
+            coneGo.transform.SetParent(root.transform, false);
+            coneGo.AddComponent<MeshFilter>();
+            coneGo.AddComponent<MeshRenderer>();
+            var cone = coneGo.AddComponent<VisionConeView>();
+            var coneMat = AssetDatabase.LoadAssetAtPath<Material>(VisionConeMatPath);
+            var coneSo = new SerializedObject(cone);
+            coneSo.FindProperty("_material").objectReferenceValue = coneMat;
+            coneSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var npcSo = new SerializedObject(root.GetComponent<NetworkFearfulNpc>());
+            npcSo.FindProperty("_visionCone").objectReferenceValue = cone;
+            npcSo.FindProperty("_characterController").objectReferenceValue = cc;
+            npcSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+            Object.DestroyImmediate(root);
+            return prefab.GetComponent<NetworkObject>();
+        }
+
+        static void EnsureVisionConeMaterial()
+        {
+            if (!Directory.Exists("Assets/Materials"))
+            {
+                Directory.CreateDirectory("Assets/Materials");
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<Material>(VisionConeMatPath) != null)
+            {
+                return;
+            }
+
+            var shader = Shader.Find("GypsyAliens/VisionCone");
+            if (shader == null)
+            {
+                return;
+            }
+
+            var mat = new Material(shader);
+            AssetDatabase.CreateAsset(mat, VisionConeMatPath);
+        }
+
         static void CreateGameScene(
             BuildingTileSet tileSet,
             NetworkRunner runnerPrefab,
             NetworkObject sessionPrefab,
             NetworkObject playerPrefab,
+            NetworkObject catNpcPrefab,
+            NetworkObject dogNpcPrefab,
             GameObject connectionMenuPrefab)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
@@ -298,7 +386,17 @@ namespace GypsyAliens.EditorTools
             networkSo.FindProperty("_runnerPrefab").objectReferenceValue = runnerPrefab;
             networkSo.FindProperty("_sessionPrefab").objectReferenceValue = sessionPrefab;
             networkSo.FindProperty("_playerPrefab").objectReferenceValue = playerPrefab;
+            networkSo.FindProperty("_catNpcPrefab").objectReferenceValue = catNpcPrefab;
+            networkSo.FindProperty("_dogNpcPrefab").objectReferenceValue = dogNpcPrefab;
             networkSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var npcGo = new GameObject("NpcSpawner");
+            npcGo.transform.SetParent(systems.transform);
+            var npcSpawner = npcGo.AddComponent<NpcSpawner>();
+            var npcSo = new SerializedObject(npcSpawner);
+            npcSo.FindProperty("_catPrefab").objectReferenceValue = catNpcPrefab;
+            npcSo.FindProperty("_dogPrefab").objectReferenceValue = dogNpcPrefab;
+            npcSo.ApplyModifiedPropertiesWithoutUndo();
 
             var levelGo = new GameObject("LevelGenerationSystem");
             levelGo.transform.SetParent(systems.transform);

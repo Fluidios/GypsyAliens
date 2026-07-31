@@ -315,6 +315,7 @@ MonoBehaviour:
   _fakeProgressSpeed: 0.35
   _connectingMessage: Connecting...
   _generatingMessage: Generating location...
+  _preparingMessage: Preparing location...
 --- !u!1 &382866401
 GameObject:
   m_ObjectHideFlags: 0
@@ -364,6 +365,7 @@ Transform:
   - {fileID: 268870160}
   - {fileID: 1901261134}
   - {fileID: 1294753779}
+  - {fileID: 1131375643}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &548790325
@@ -844,6 +846,55 @@ MonoBehaviour:
   _runnerPrefab: {fileID: 4014250970722041787, guid: 477c936ee2a41944a96366a265fa20fb, type: 3}
   _sessionPrefab: {fileID: 935453698238038625, guid: 41cdbec1a94219d4fa1d3fe6e0dba8ab, type: 3}
   _playerPrefab: {fileID: 8942655790602385305, guid: efd50a7e8da47ce4d8586567ab904f2d, type: 3}
+  _catNpcPrefab: {fileID: 8572131934146436484, guid: 1c53a82d66bed68498d45c9a0b0864fa, type: 3}
+  _dogNpcPrefab: {fileID: 4118628486858294683, guid: b0812864e4ccebb41b05d5331ddbf480, type: 3}
+--- !u!1 &1131375642
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1131375643}
+  - component: {fileID: 1131375644}
+  m_Layer: 0
+  m_Name: NpcSpawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1131375643
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1131375642}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 382866403}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1131375644
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1131375642}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2009940258a18664fa287c2b73e552d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _catPrefab: {fileID: 8572131934146436484, guid: 1c53a82d66bed68498d45c9a0b0864fa, type: 3}
+  _dogPrefab: {fileID: 4118628486858294683, guid: b0812864e4ccebb41b05d5331ddbf480, type: 3}
+  _spawnHeight: 0.05
 --- !u!1 &1180903653
 GameObject:
   m_ObjectHideFlags: 0
@@ -1091,6 +1142,7 @@ MonoBehaviour:
   _rayLength: 500
   _fadeAlpha: 0.28
   _fadeRadius: 3.6
+  _behindProbe: 0.2
   _sourcePrototypeMaterial: {fileID: 2100000, guid: 4930c6ffa5b9b9f4098249a43abf8506, type: 2}
 --- !u!1 &1555657245
 GameObject:

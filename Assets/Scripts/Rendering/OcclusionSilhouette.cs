@@ -151,7 +151,31 @@ namespace GypsyAliens.Rendering
 
         static bool IsIgnoredRenderer(Renderer renderer)
         {
-            if (renderer.gameObject.name == "WallXRay_ShadowProxy")
+            if (renderer == null)
+            {
+                return true;
+            }
+
+            // Vision cones must stay depth-tested — never get character X-ray silhouette passes.
+            var go = renderer.gameObject;
+            if (go.name == "VisionCone")
+            {
+                return true;
+            }
+
+            // Also skip any renderer under a VisionCone root.
+            var t = go.transform.parent;
+            while (t != null)
+            {
+                if (t.name == "VisionCone")
+                {
+                    return true;
+                }
+
+                t = t.parent;
+            }
+
+            if (go.name == "WallXRay_ShadowProxy")
             {
                 return true;
             }
