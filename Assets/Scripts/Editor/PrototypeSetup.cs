@@ -46,6 +46,11 @@ namespace GypsyAliens.EditorTools
 
         const string CatVisualPath = "Assets/PolyOne/Cartoon Dog, Cat/Prefab/SM_CartoonAnimal_Cat.prefab";
         const string DogVisualPath = "Assets/PolyOne/Cartoon Dog, Cat/Prefab/SM_CartoonAnimal_Dog.prefab";
+        const string ParrotVisualPath = "Assets/Parrot_Rig_1.0.fbx";
+        const string ParrotTexturePath = "Assets/ParrotColour Base Color.png";
+        const string ParrotMaterialPath = "Assets/Art/Materials/Parrot_URP.mat";
+        const string ParrotDragSfxPath = "Assets/Free Game Music Collection/popugajam.mp3";
+        const string ParrotExtractSfxPath = "Assets/Free Game Music Collection/gubaj.mp3";
         const string VisionConeMatPath = "Assets/Materials/VisionCone.mat";
         const string AlienMaterialPath = "Assets/Alien/Materials/1K_Alien_TXTR.mat";
 
@@ -61,6 +66,7 @@ namespace GypsyAliens.EditorTools
             CreatePlayerPrefab(animator);
             var catNpc = CreateAnimalNpcPrefab("NetworkCatNpc", CatVisualPath);
             var dogNpc = CreateAnimalNpcPrefab("NetworkDogNpc", DogVisualPath);
+            var parrotNpc = CreateAnimalNpcPrefab("NetworkParrotNpc", ParrotVisualPath);
             var connectionMenuPrefab = CreateConnectionMenuPrefab();
 
             var runnerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabNetworkFolder + "/NetworkRunner.prefab")
@@ -70,7 +76,15 @@ namespace GypsyAliens.EditorTools
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabNetworkFolder + "/NetworkPlayer.prefab")
                 .GetComponent<NetworkObject>();
 
-            CreateGameScene(tileSet, runnerPrefab, sessionPrefab, playerPrefab, catNpc, dogNpc, connectionMenuPrefab);
+            CreateGameScene(
+                tileSet,
+                runnerPrefab,
+                sessionPrefab,
+                playerPrefab,
+                catNpc,
+                dogNpc,
+                parrotNpc,
+                connectionMenuPrefab);
 
             NetworkProjectConfigUtilities.RebuildPrefabTable();
             AssetDatabase.SaveAssets();
@@ -377,6 +391,15 @@ namespace GypsyAliens.EditorTools
                     cc.center = new Vector3(0f, 0.18f, 0f);
                     cc.stepOffset = 0.05f;
                 }
+                else if (name.Contains("Parrot"))
+                {
+                    visual.transform.localScale = Vector3.one * 0.09f;
+                    cc.height = 0.28f;
+                    cc.radius = 0.1f;
+                    cc.center = new Vector3(0f, 0.14f, 0f);
+                    cc.stepOffset = 0.04f;
+                    ApplyParrotMaterial(visual);
+                }
                 else
                 {
                     cc.stepOffset = 0.2f;
@@ -405,11 +428,95 @@ namespace GypsyAliens.EditorTools
             var npcSo = new SerializedObject(root.GetComponent<NetworkFearfulNpc>());
             npcSo.FindProperty("_visionCone").objectReferenceValue = cone;
             npcSo.FindProperty("_characterController").objectReferenceValue = cc;
+            if (name.Contains("Parrot"))
+            {
+                npcSo.FindProperty("_dragWeight").floatValue = 0.22f;
+                npcSo.FindProperty("_eyeHeight").floatValue = 0.22f;
+                npcSo.FindProperty("_dragStartSfx").objectReferenceValue =
+                    AssetDatabase.LoadAssetAtPath<AudioClip>(ParrotDragSfxPath);
+                npcSo.FindProperty("_extractSfx").objectReferenceValue =
+                    AssetDatabase.LoadAssetAtPath<AudioClip>(ParrotExtractSfxPath);
+            }
+            else if (name.Contains("Cat"))
+            {
+                npcSo.FindProperty("_dragWeight").floatValue = 0.4f;
+            }
+            else if (name.Contains("Dog"))
+            {
+                npcSo.FindProperty("_dragWeight").floatValue = 1.15f;
+            }
+
             npcSo.ApplyModifiedPropertiesWithoutUndo();
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
             return prefab.GetComponent<NetworkObject>();
+        }
+
+        static void ApplyParrotMaterial(GameObject visual)
+        {
+            var mat = EnsureParrotMaterial();
+            if (mat == null || visual == null)
+            {
+                return;
+            }
+
+            foreach (var renderer in visual.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                var mats = renderer.sharedMaterials;
+                for (var i = 0; i < mats.Length; i++)
+                {
+                    if (mats[i] != null && mats[i].name.IndexOf("Eye", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        continue;
+                    }
+
+                    mats[i] = mat;
+                }
+
+                renderer.sharedMaterials = mats;
+            }
+        }
+
+        static Material EnsureParrotMaterial()
+        {
+            EnsureFolder("Assets/Art");
+            EnsureFolder("Assets/Art/Materials");
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(ParrotMaterialPath);
+            if (mat == null)
+            {
+                var shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null)
+                {
+                    return null;
+                }
+
+                mat = new Material(shader) { name = "Parrot_URP" };
+                AssetDatabase.CreateAsset(mat, ParrotMaterialPath);
+            }
+
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(ParrotTexturePath);
+            if (tex != null)
+            {
+                if (mat.HasProperty("_BaseMap"))
+                {
+                    mat.SetTexture("_BaseMap", tex);
+                }
+
+                if (mat.HasProperty("_MainTex"))
+                {
+                    mat.SetTexture("_MainTex", tex);
+                }
+
+                EditorUtility.SetDirty(mat);
+            }
+
+            return mat;
         }
 
         static void EnsureVisionConeMaterial()
@@ -441,6 +548,7 @@ namespace GypsyAliens.EditorTools
             NetworkObject playerPrefab,
             NetworkObject catNpcPrefab,
             NetworkObject dogNpcPrefab,
+            NetworkObject parrotNpcPrefab,
             GameObject connectionMenuPrefab)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
@@ -477,6 +585,7 @@ namespace GypsyAliens.EditorTools
             networkSo.FindProperty("_playerPrefab").objectReferenceValue = playerPrefab;
             networkSo.FindProperty("_catNpcPrefab").objectReferenceValue = catNpcPrefab;
             networkSo.FindProperty("_dogNpcPrefab").objectReferenceValue = dogNpcPrefab;
+            networkSo.FindProperty("_parrotNpcPrefab").objectReferenceValue = parrotNpcPrefab;
             networkSo.ApplyModifiedPropertiesWithoutUndo();
 
             var npcGo = new GameObject("NpcSpawner");
@@ -485,6 +594,7 @@ namespace GypsyAliens.EditorTools
             var npcSo = new SerializedObject(npcSpawner);
             npcSo.FindProperty("_catPrefab").objectReferenceValue = catNpcPrefab;
             npcSo.FindProperty("_dogPrefab").objectReferenceValue = dogNpcPrefab;
+            npcSo.FindProperty("_parrotPrefab").objectReferenceValue = parrotNpcPrefab;
             npcSo.ApplyModifiedPropertiesWithoutUndo();
 
             var levelGo = new GameObject("LevelGenerationSystem");
@@ -596,23 +706,40 @@ namespace GypsyAliens.EditorTools
 
             var description = InstantiateUiPrefab(descriptionPrefab, panel.transform, "Description");
             SetRect(description, new Vector2(0f, 70f), new Vector2(400f, 28f));
-            SetUiText(description, "Enter a room name, then host or join.", TextAnchor.MiddleCenter);
+            SetUiText(description, "Same room name + same Photon region for everyone.", TextAnchor.MiddleCenter);
 
             var roomInput = InstantiateUiPrefab(inputFieldPrefab, panel.transform, "RoomName");
-            SetRect(roomInput, new Vector2(0f, 10f), new Vector2(360f, 48f));
+            SetRect(roomInput, new Vector2(0f, 55f), new Vector2(360f, 48f));
             ConfigureRoomInput(roomInput, "GypsyAliens");
 
+            panelRt.sizeDelta = new Vector2(520f, 500f);
+
+            var regionLabel = InstantiateUiPrefab(descriptionPrefab, panel.transform, "RegionLabel");
+            SetRect(regionLabel, new Vector2(0f, 18f), new Vector2(360f, 24f));
+            SetUiText(regionLabel, "Photon Region", TextAnchor.MiddleLeft);
+
+            CreateRegionDropdown(panel.transform);
+
             var hostBtn = InstantiateUiPrefab(squareButtonPrefab, panel.transform, "HostButton");
-            SetRect(hostBtn, new Vector2(-140f, -90f), new Vector2(160f, 56f));
+            SetRect(hostBtn, new Vector2(-140f, -85f), new Vector2(160f, 56f));
             SetUiText(hostBtn, "Host", TextAnchor.MiddleCenter);
 
             var joinBtn = InstantiateUiPrefab(squareButtonPrefab, panel.transform, "JoinButton");
-            SetRect(joinBtn, new Vector2(140f, -90f), new Vector2(160f, 56f));
+            SetRect(joinBtn, new Vector2(140f, -85f), new Vector2(160f, 56f));
             SetUiText(joinBtn, "Join", TextAnchor.MiddleCenter);
 
             var autoBtn = InstantiateUiPrefab(squareButtonPrefab, panel.transform, "AutoButton");
-            SetRect(autoBtn, new Vector2(0f, -170f), new Vector2(200f, 56f));
+            SetRect(autoBtn, new Vector2(0f, -165f), new Vector2(200f, 56f));
             SetUiText(autoBtn, "Auto Host/Join", TextAnchor.MiddleCenter);
+
+            // Gear opens hub settings (volume) — not Escape.
+            var settingsBtn = InstantiateUiPrefab(squareButtonPrefab, root.transform, "SettingsButton");
+            var settingsRt = settingsBtn.GetComponent<RectTransform>();
+            settingsRt.anchorMin = settingsRt.anchorMax = new Vector2(1f, 1f);
+            settingsRt.pivot = new Vector2(1f, 1f);
+            settingsRt.anchoredPosition = new Vector2(-28f, -28f);
+            settingsRt.sizeDelta = new Vector2(72f, 72f);
+            SetUiText(settingsBtn, "⚙", TextAnchor.MiddleCenter);
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
@@ -717,6 +844,8 @@ namespace GypsyAliens.EditorTools
 
             var input = menuRoot.GetComponentInChildren<InputField>(true);
             so.FindProperty("_roomNameInput").objectReferenceValue = input;
+            so.FindProperty("_regionDropdown").objectReferenceValue =
+                menuRoot.GetComponentInChildren<Dropdown>(true);
 
             foreach (var button in menuRoot.GetComponentsInChildren<Button>(true))
             {
@@ -731,10 +860,154 @@ namespace GypsyAliens.EditorTools
                     case "AutoButton":
                         so.FindProperty("_autoButton").objectReferenceValue = button;
                         break;
+                    case "SettingsButton":
+                        so.FindProperty("_settingsButton").objectReferenceValue = button;
+                        break;
                 }
             }
 
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static Dropdown CreateRegionDropdown(Transform panel)
+        {
+            const string cleanRoot = "Assets/Clean Settings UI/";
+            var lineSprite = AssetDatabase.LoadAssetAtPath<Sprite>(cleanRoot + "Images/line_up.png");
+            var lineHover = AssetDatabase.LoadAssetAtPath<Sprite>(cleanRoot + "Images/line_hover.png");
+            var arrowSprite = AssetDatabase.LoadAssetAtPath<Sprite>(cleanRoot + "Images/icons/arrow_down.png");
+            var checkSprite = AssetDatabase.LoadAssetAtPath<Sprite>(cleanRoot + "Images/toggle_checkmark.png");
+
+            var ddGo = new GameObject("RegionDropdown", typeof(RectTransform), typeof(Image), typeof(Dropdown));
+            ddGo.transform.SetParent(panel, false);
+            SetRect(ddGo, new Vector2(0f, -18f), new Vector2(360f, 40f));
+            var ddImg = ddGo.GetComponent<Image>();
+            ddImg.sprite = lineSprite;
+            ddImg.type = Image.Type.Sliced;
+            ddImg.color = Color.white;
+
+            var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            labelGo.transform.SetParent(ddGo.transform, false);
+            var labelRt = labelGo.GetComponent<RectTransform>();
+            labelRt.anchorMin = Vector2.zero;
+            labelRt.anchorMax = Vector2.one;
+            labelRt.offsetMin = new Vector2(14f, 4f);
+            labelRt.offsetMax = new Vector2(-36f, -4f);
+            var label = labelGo.GetComponent<Text>();
+            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+                         ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+            label.fontSize = 16;
+            label.alignment = TextAnchor.MiddleLeft;
+            label.color = Color.white;
+            label.raycastTarget = false;
+
+            var arrowGo = new GameObject("Arrow", typeof(RectTransform), typeof(Image));
+            arrowGo.transform.SetParent(ddGo.transform, false);
+            var arrowRt = arrowGo.GetComponent<RectTransform>();
+            arrowRt.anchorMin = new Vector2(1f, 0.5f);
+            arrowRt.anchorMax = new Vector2(1f, 0.5f);
+            arrowRt.pivot = new Vector2(1f, 0.5f);
+            arrowRt.anchoredPosition = new Vector2(-8f, 0f);
+            arrowRt.sizeDelta = new Vector2(18f, 18f);
+            var arrowImg = arrowGo.GetComponent<Image>();
+            arrowImg.sprite = arrowSprite;
+            arrowImg.color = Color.white;
+            arrowImg.raycastTarget = false;
+
+            var template = new GameObject("Template", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+            template.transform.SetParent(ddGo.transform, false);
+            var templateRt = template.GetComponent<RectTransform>();
+            templateRt.anchorMin = new Vector2(0f, 0f);
+            templateRt.anchorMax = new Vector2(1f, 0f);
+            templateRt.pivot = new Vector2(0.5f, 1f);
+            templateRt.anchoredPosition = new Vector2(0f, 2f);
+            templateRt.sizeDelta = new Vector2(0f, 190f);
+            var templateImg = template.GetComponent<Image>();
+            templateImg.sprite = lineSprite;
+            templateImg.type = Image.Type.Sliced;
+            templateImg.color = Color.white;
+
+            var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+            viewport.transform.SetParent(template.transform, false);
+            var viewportRt = viewport.GetComponent<RectTransform>();
+            viewportRt.anchorMin = Vector2.zero;
+            viewportRt.anchorMax = Vector2.one;
+            viewportRt.offsetMin = new Vector2(4f, 4f);
+            viewportRt.offsetMax = new Vector2(-4f, -4f);
+            viewport.GetComponent<Image>().color = Color.white;
+            viewport.GetComponent<Mask>().showMaskGraphic = false;
+
+            var content = new GameObject("Content", typeof(RectTransform));
+            content.transform.SetParent(viewport.transform, false);
+            var contentRt = content.GetComponent<RectTransform>();
+            contentRt.anchorMin = new Vector2(0f, 1f);
+            contentRt.anchorMax = new Vector2(1f, 1f);
+            contentRt.pivot = new Vector2(0.5f, 1f);
+            contentRt.sizeDelta = new Vector2(0f, 36f);
+
+            var item = new GameObject("Item", typeof(RectTransform), typeof(Toggle));
+            item.transform.SetParent(content.transform, false);
+            var itemRt = item.GetComponent<RectTransform>();
+            itemRt.anchorMin = new Vector2(0f, 0.5f);
+            itemRt.anchorMax = new Vector2(1f, 0.5f);
+            itemRt.sizeDelta = new Vector2(0f, 32f);
+
+            var itemBg = new GameObject("Item Background", typeof(RectTransform), typeof(Image));
+            itemBg.transform.SetParent(item.transform, false);
+            var itemBgRt = itemBg.GetComponent<RectTransform>();
+            itemBgRt.anchorMin = Vector2.zero;
+            itemBgRt.anchorMax = Vector2.one;
+            itemBgRt.offsetMin = Vector2.zero;
+            itemBgRt.offsetMax = Vector2.zero;
+            var itemBgImg = itemBg.GetComponent<Image>();
+            itemBgImg.sprite = lineHover;
+            itemBgImg.type = Image.Type.Sliced;
+            itemBgImg.color = Color.white;
+
+            var itemCheck = new GameObject("Item Checkmark", typeof(RectTransform), typeof(Image));
+            itemCheck.transform.SetParent(item.transform, false);
+            var checkRt = itemCheck.GetComponent<RectTransform>();
+            checkRt.anchorMin = new Vector2(0f, 0.5f);
+            checkRt.anchorMax = new Vector2(0f, 0.5f);
+            checkRt.pivot = new Vector2(0f, 0.5f);
+            checkRt.anchoredPosition = new Vector2(8f, 0f);
+            checkRt.sizeDelta = new Vector2(16f, 16f);
+            var checkImg = itemCheck.GetComponent<Image>();
+            checkImg.sprite = checkSprite;
+            checkImg.color = Color.white;
+
+            var itemLabelGo = new GameObject("Item Label", typeof(RectTransform), typeof(Text));
+            itemLabelGo.transform.SetParent(item.transform, false);
+            var itemLabelRt = itemLabelGo.GetComponent<RectTransform>();
+            itemLabelRt.anchorMin = Vector2.zero;
+            itemLabelRt.anchorMax = Vector2.one;
+            itemLabelRt.offsetMin = new Vector2(28f, 2f);
+            itemLabelRt.offsetMax = new Vector2(-8f, -2f);
+            var itemLabel = itemLabelGo.GetComponent<Text>();
+            itemLabel.font = label.font;
+            itemLabel.fontSize = 15;
+            itemLabel.alignment = TextAnchor.MiddleLeft;
+            itemLabel.color = Color.white;
+            itemLabel.raycastTarget = false;
+
+            var toggle = item.GetComponent<Toggle>();
+            toggle.targetGraphic = itemBgImg;
+            toggle.graphic = checkImg;
+            toggle.isOn = true;
+
+            var scroll = template.GetComponent<ScrollRect>();
+            scroll.content = contentRt;
+            scroll.viewport = viewportRt;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+
+            var dropdown = ddGo.GetComponent<Dropdown>();
+            dropdown.targetGraphic = ddImg;
+            dropdown.captionText = label;
+            dropdown.itemText = itemLabel;
+            dropdown.template = templateRt;
+            template.SetActive(false);
+            return dropdown;
         }
 
         static void AddSceneToBuildSettings(string scenePath)

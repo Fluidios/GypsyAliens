@@ -46,6 +46,9 @@ namespace GypsyAliens.Npc
         [SerializeField] StunStarsEffect _stunStars;
         [SerializeField] DragOutlineView _dragOutline;
         [SerializeField] DragNoiseSource _dragNoise;
+        [SerializeField] AudioClip _dragStartSfx;
+        [SerializeField] AudioClip _extractSfx;
+        [SerializeField] [Range(0f, 1f)] float _sfxVolume = 1f;
 
         readonly List<Vector3> _waypoints = new List<Vector3>(8);
         readonly List<RoomNavNode> _candidateRooms = new List<RoomNavNode>(16);
@@ -63,6 +66,7 @@ namespace GypsyAliens.Npc
         float _extractTargetY;
         bool _extractFinished;
         bool _extractFxPlayed;
+        bool _wasDragged;
         GypsyAliens.Gameplay.EvacuationZone _extractZone;
         CapsuleCollider _hitCollider;
 
@@ -200,6 +204,15 @@ namespace GypsyAliens.Npc
                 _dragNoise.SetEmitting(IsMakingDragNoise && IsDragged && !IsExtracting);
             }
 
+            // Optional per-animal SFX (parrot only) — play locally on every peer.
+            var dragged = IsDragged && !IsExtracting;
+            if (dragged && !_wasDragged)
+            {
+                PlayLocalSfx(_dragStartSfx);
+            }
+
+            _wasDragged = dragged;
+
             // Saucer / beam are local visuals — play on every peer when extraction starts.
             if (IsExtracting)
             {
@@ -207,12 +220,31 @@ namespace GypsyAliens.Npc
                 {
                     _extractFxPlayed = true;
                     PlayLocalExtractionFx(transform.position);
+                    PlayLocalSfx(_extractSfx);
                 }
             }
             else
             {
                 _extractFxPlayed = false;
             }
+        }
+
+        void PlayLocalSfx(AudioClip clip)
+        {
+            if (clip == null)
+            {
+                return;
+            }
+
+            // 2D one-shot so short animal cues stay audible regardless of camera distance.
+            var go = new GameObject("NpcSfx");
+            go.transform.position = transform.position;
+            var source = go.AddComponent<AudioSource>();
+            source.clip = clip;
+            source.volume = Mathf.Clamp01(_sfxVolume);
+            source.spatialBlend = 0f;
+            source.Play();
+            Destroy(go, clip.length + 0.25f);
         }
 
         static void PlayLocalExtractionFx(Vector3 from)

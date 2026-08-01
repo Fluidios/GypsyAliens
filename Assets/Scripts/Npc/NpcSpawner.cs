@@ -15,13 +15,18 @@ namespace GypsyAliens.Npc
     {
         [SerializeField] NetworkObject _catPrefab;
         [SerializeField] NetworkObject _dogPrefab;
+        [SerializeField] NetworkObject _parrotPrefab;
         [SerializeField] NetworkObject _hostilePrefab;
         [SerializeField] float _spawnHeight = 0.05f;
 
         readonly List<NetworkObject> _spawned = new List<NetworkObject>(4);
         bool _spawnedForCurrentLevel;
 
-        public void Configure(NetworkObject catPrefab, NetworkObject dogPrefab, NetworkObject hostilePrefab = null)
+        public void Configure(
+            NetworkObject catPrefab,
+            NetworkObject dogPrefab,
+            NetworkObject parrotPrefab = null,
+            NetworkObject hostilePrefab = null)
         {
             if (catPrefab != null)
             {
@@ -31,6 +36,11 @@ namespace GypsyAliens.Npc
             if (dogPrefab != null)
             {
                 _dogPrefab = dogPrefab;
+            }
+
+            if (parrotPrefab != null)
+            {
+                _parrotPrefab = parrotPrefab;
             }
 
             if (hostilePrefab != null)
@@ -133,9 +143,15 @@ namespace GypsyAliens.Npc
                 return;
             }
 
-            var neededRooms = _hostilePrefab != null ? 3 : 2;
+            var animalPrefabs = new List<NetworkObject>(3) { _catPrefab, _dogPrefab };
+            if (_parrotPrefab != null)
+            {
+                animalPrefabs.Add(_parrotPrefab);
+            }
+
+            var neededRooms = animalPrefabs.Count + (_hostilePrefab != null ? 1 : 0);
             var rooms = PickSpawnRooms(nav.Map, level.SpawnPosition, neededRooms);
-            if (rooms.Count < 2)
+            if (rooms.Count < animalPrefabs.Count)
             {
                 Debug.LogWarning("NpcSpawner: not enough rooms to place NPCs.", this);
                 FinalizeSpawn(0);
@@ -145,13 +161,17 @@ namespace GypsyAliens.Npc
             DespawnAll();
 
             var runner = network.Runner;
-            SpawnOne(runner, _catPrefab, rooms[0]);
-            SpawnOne(runner, _dogPrefab, rooms[1]);
+            for (var i = 0; i < animalPrefabs.Count; i++)
+            {
+                SpawnOne(runner, animalPrefabs[i], rooms[i]);
+            }
 
             var animalCount = _spawned.Count;
             if (_hostilePrefab != null)
             {
-                var hostileRoom = rooms.Count > 2 ? rooms[2] : rooms[rooms.Count - 1];
+                var hostileRoom = rooms.Count > animalPrefabs.Count
+                    ? rooms[animalPrefabs.Count]
+                    : rooms[rooms.Count - 1];
                 SpawnOne(runner, _hostilePrefab, hostileRoom);
             }
 

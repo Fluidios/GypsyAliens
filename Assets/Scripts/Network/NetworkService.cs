@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Fusion;
+using Fusion.Photon.Realtime;
 using GypsyAliens.Core;
 using GypsyAliens.UI;
 using UnityEngine;
@@ -17,6 +18,7 @@ namespace GypsyAliens.Network
         [SerializeField] NetworkObject _playerPrefab;
         [SerializeField] NetworkObject _catNpcPrefab;
         [SerializeField] NetworkObject _dogNpcPrefab;
+        [SerializeField] NetworkObject _parrotNpcPrefab;
         [SerializeField] NetworkObject _hostileNpcPrefab;
         [SerializeField] NetworkObject _rockPrefab;
 
@@ -30,17 +32,20 @@ namespace GypsyAliens.Network
         public NetworkObject PlayerPrefab => _playerPrefab;
         public NetworkObject CatNpcPrefab => _catNpcPrefab;
         public NetworkObject DogNpcPrefab => _dogNpcPrefab;
+        public NetworkObject ParrotNpcPrefab => _parrotNpcPrefab;
         public NetworkObject HostileNpcPrefab => _hostileNpcPrefab;
         public NetworkObject RockPrefab => _rockPrefab;
 
-        public Task StartHostAsync(string roomName) => StartGameAsync(GameMode.Host, roomName);
+        public Task StartHostAsync(string roomName, string photonRegion = null) =>
+            StartGameAsync(GameMode.Host, roomName, photonRegion);
 
-        public Task StartClientAsync(string roomName) => StartGameAsync(GameMode.Client, roomName);
+        public Task StartClientAsync(string roomName, string photonRegion = null) =>
+            StartGameAsync(GameMode.Client, roomName, photonRegion);
 
-        public Task StartAutoHostOrClientAsync(string roomName) =>
-            StartGameAsync(GameMode.AutoHostOrClient, roomName);
+        public Task StartAutoHostOrClientAsync(string roomName, string photonRegion = null) =>
+            StartGameAsync(GameMode.AutoHostOrClient, roomName, photonRegion);
 
-        async Task StartGameAsync(GameMode mode, string roomName)
+        async Task StartGameAsync(GameMode mode, string roomName, string photonRegion)
         {
             if (_runnerPrefab == null)
             {
@@ -69,7 +74,11 @@ namespace GypsyAliens.Network
             if (SystemLocator.Instance != null
                 && SystemLocator.Instance.TryGet<GypsyAliens.Npc.NpcSpawner>(out var npcSpawner))
             {
-                npcSpawner.Configure(_catNpcPrefab, _dogNpcPrefab, _hostileNpcPrefab);
+                npcSpawner.Configure(
+                    _catNpcPrefab,
+                    _dogNpcPrefab,
+                    _parrotNpcPrefab,
+                    _hostileNpcPrefab);
             }
 
             var sceneManager = _runner.GetComponent<INetworkSceneManager>()
@@ -80,7 +89,11 @@ namespace GypsyAliens.Network
                 GameMode = mode,
                 SessionName = string.IsNullOrWhiteSpace(roomName) ? null : roomName,
                 SceneManager = sceneManager,
+                CustomPhotonAppSettings = BuildAppSettings(photonRegion),
             };
+
+            var regionLabel = string.IsNullOrWhiteSpace(photonRegion) ? "best" : photonRegion.Trim();
+            Debug.Log($"NetworkService: starting {mode} room='{args.SessionName}' region='{regionLabel}'.");
 
             var result = await _runner.StartGame(args);
             if (result.Ok)
@@ -96,6 +109,20 @@ namespace GypsyAliens.Network
             }
 
             ReturnToConnectionMenu();
+        }
+
+        static FusionAppSettings BuildAppSettings(string photonRegion)
+        {
+            if (!PhotonAppSettings.TryGetGlobal(out var global) || global.AppSettings == null)
+            {
+                return null;
+            }
+
+            var settings = global.AppSettings.GetCopy();
+            settings.FixedRegion = string.IsNullOrWhiteSpace(photonRegion)
+                ? string.Empty
+                : photonRegion.Trim().ToLowerInvariant();
+            return settings;
         }
 
         public async Task ShutdownAsync()

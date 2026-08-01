@@ -29,6 +29,7 @@ namespace GypsyAliens.Audio
         protected override void Awake()
         {
             base.Awake();
+            GameAudioSettings.ApplySavedOrDefault();
             EnsureSources();
             PlayMenuImmediate();
         }
